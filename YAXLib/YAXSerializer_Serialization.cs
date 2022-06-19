@@ -423,102 +423,140 @@ namespace YAXLib
         {
             var (hasCustomSerializer, isKnownType, areOfSameType) = flags;
 
-            // find the parent element from its location
-            var parElem = XMLUtils.FindLocation(_baseElement, serializationLocation);
-            if (parElem == null) // if the parent element does not exist
-            {
-                // see if the location can be created
-                if (!XMLUtils.CanCreateLocation(_baseElement, serializationLocation))
-                    throw new YAXBadLocationException(serializationLocation);
-                // try to create the location
-                parElem = XMLUtils.CreateLocation(_baseElement, serializationLocation);
-                if (parElem == null)
-                    throw new YAXBadLocationException(serializationLocation);
-            }
+            // Throw, if no parent element can be found
+            var parElem = GetParentElement(serializationLocation);
 
-            // if control is moved here, it means that the parent 
-            // element has been found/created successfully
-
-            if (member.HasComment)
-                foreach (var comment in member.Comment!)
-                    parElem.Add(new XComment(comment));
+            AddComments(parElem, member);
 
             if (hasCustomSerializer)
             {
-                var elemToFill = new XElement(member.Alias.OverrideNsIfEmpty(TypeNamespace));
-                parElem.Add(elemToFill);
-                if (member.HasCustomSerializer)
-                    InvokeCustomSerializerToElement(member.CustomSerializerType, elementValue, elemToFill, member, null, this);
-                else if (member.MemberTypeWrapper.HasCustomSerializer)
-                    InvokeCustomSerializerToElement(member.MemberTypeWrapper.CustomSerializerType, elementValue, elemToFill,
-                        null, member.MemberTypeWrapper, this);
-
-                if (member.PreservesWhitespace)
-                    XMLUtils.AddPreserveSpaceAttribute(elemToFill, Options.Culture);
+                InvokeCustomSerializer(parElem, elementValue, member);
             }
             else if (isKnownType)
             {
-                var elemToFill = new XElement(member.Alias.OverrideNsIfEmpty(TypeNamespace));
-                parElem.Add(elemToFill);
-                KnownTypes.Serialize(elementValue, elemToFill,
-                    member.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThen(XNamespace.None));
-                if (member.PreservesWhitespace)
-                    XMLUtils.AddPreserveSpaceAttribute(elemToFill, Options.Culture);
+                AddKnownTypeElement(parElem, elementValue, member);
             }
             else
             {
-                // make an element with the provided data
-                var elemToAdd = MakeElement(parElem, member, elementValue, out var moveDescOnly,
-                    out var alreadyAdded);
-                if (!areOfSameType)
+                AddElement(parElem, elementValue, member, areOfSameType);
+            }
+        }
+
+        /// <summary>
+        ///    Adds a 'regular' <see cref="XElement"/> to the parent element.
+        /// </summary>
+        /// <param name="parElem"></param>
+        /// <param name="elementValue"></param>
+        /// <param name="member"></param>
+        /// <param name="areOfSameType"></param>
+        private void AddElement(XElement parElem, object elementValue, MemberWrapper member, bool areOfSameType)
+        {
+            // make an element with the provided data
+            var elemToAdd = MakeElement(parElem, member, elementValue, out var moveDescOnly,
+                out var alreadyAdded);
+            if (!areOfSameType)
+            {
+                var realType = elementValue.GetType();
+
+                var realTypeDefinition = member.GetRealTypeDefinition(realType);
+                if (realTypeDefinition != null)
                 {
-                    var realType = elementValue.GetType();
-
-                    // TODO: find other usages 
-                    var realTypeDefinition = member.GetRealTypeDefinition(realType);
-                    if (realTypeDefinition != null)
+                    var alias = realTypeDefinition.Alias;
+                    if (string.IsNullOrEmpty(alias))
                     {
-                        var alias = realTypeDefinition.Alias;
-                        if (string.IsNullOrEmpty(alias))
-                        {
-                            var typeWrapper = TypeWrappersPool.Pool.GetTypeWrapper(realType, this);
-                            alias = typeWrapper.Alias.LocalName;
-                        }
+                        var typeWrapper = TypeWrappersPool.Pool.GetTypeWrapper(realType, this);
+                        alias = typeWrapper.Alias.LocalName;
+                    }
 
-                        // TODO: see how namespace is handled in other parts of the code and do the same thing
-                        elemToAdd.Name = XName.Get(alias, elemToAdd.Name.Namespace.NamespaceName);
-                    }
-                    else
-                    {
-                        AddMetadataAttribute(elemToAdd, Options.Namespace.Uri + Options.AttributeName.RealType,
-                            realType.FullName, _documentDefaultNamespace);
-                    }
+                    // TODO: see how namespace is handled in other parts of the code and do the same thing
+                    elemToAdd.Name = XName.Get(alias, elemToAdd.Name.Namespace.NamespaceName);
                 }
-
-                if (moveDescOnly) // if only the descendants of the resulting element are going to be added ...
+                else
                 {
-                    XMLUtils.MoveDescendants(elemToAdd, parElem);
-                    if (elemToAdd.Parent == parElem)
-                        elemToAdd.Remove();
-                }
-                else if (!alreadyAdded)
-                {
-                    // see if such element already exists
-                    var existingElem = parElem.Element(member.Alias.OverrideNsIfEmpty(TypeNamespace));
-                    if (existingElem == null)
-                    {
-                        // if not add the new element gracefully
-                        parElem.Add(elemToAdd);
-                    }
-                    else // if an element with our desired name already exists
-                    {
-                        if (ReflectionUtils.IsBasicType(member.MemberType))
-                            existingElem.SetValue(elementValue);
-                        else
-                            XMLUtils.MoveDescendants(elemToAdd, existingElem);
-                    }
+                    AddMetadataAttribute(elemToAdd, Options.Namespace.Uri + Options.AttributeName.RealType,
+                        realType.FullName, _documentDefaultNamespace);
                 }
             }
+
+            if (moveDescOnly) // if only the descendants of the resulting element are going to be added ...
+            {
+                XMLUtils.MoveDescendants(elemToAdd, parElem);
+                if (elemToAdd.Parent == parElem)
+                    elemToAdd.Remove();
+            }
+            else if (!alreadyAdded)
+            {
+                // see if such element already exists
+                var existingElem = parElem.Element(member.Alias.OverrideNsIfEmpty(TypeNamespace));
+                if (existingElem == null)
+                {
+                    // if not add the new element gracefully
+                    parElem.Add(elemToAdd);
+                }
+                else // if an element with our desired name already exists
+                {
+                    if (ReflectionUtils.IsBasicType(member.MemberType))
+                        existingElem.SetValue(elementValue);
+                    else
+                        XMLUtils.MoveDescendants(elemToAdd, existingElem);
+                }
+            }
+        }
+
+        private void AddKnownTypeElement(XElement parElem, object elementValue, MemberWrapper member)
+        {
+            var elemToFill = new XElement(member.Alias.OverrideNsIfEmpty(TypeNamespace));
+            parElem.Add(elemToFill);
+            KnownTypes.Serialize(elementValue, elemToFill,
+                member.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThen(XNamespace.None));
+            if (member.PreservesWhitespace)
+                XMLUtils.AddPreserveSpaceAttribute(elemToFill, Options.Culture);
+        }
+
+        private void InvokeCustomSerializer(XElement parElem, object elementValue, MemberWrapper member)
+        {
+            var elemToFill = new XElement(member.Alias.OverrideNsIfEmpty(TypeNamespace));
+            parElem.Add(elemToFill);
+            if (member.HasCustomSerializer)
+                InvokeCustomSerializerToElement(member.CustomSerializerType, elementValue, elemToFill, member, null, this);
+            else if (member.MemberTypeWrapper.HasCustomSerializer)
+                InvokeCustomSerializerToElement(member.MemberTypeWrapper.CustomSerializerType, elementValue, elemToFill,
+                    null, member.MemberTypeWrapper, this);
+
+            if (member.PreservesWhitespace)
+                XMLUtils.AddPreserveSpaceAttribute(elemToFill, Options.Culture);
+        }
+
+        private static void AddComments(XElement parElem, MemberWrapper member)
+        {
+            if (!member.HasComment) return;
+
+            foreach (var comment in member.Comment!)
+                parElem.Add(new XComment(comment));
+        }
+
+        /// <summary>
+        /// Gets the parent <see cref="XElement"/>.
+        /// </summary>
+        /// <param name="serializationLocation"></param>
+        /// <returns></returns>
+        /// <exception cref="YAXBadLocationException"></exception>
+        private XElement GetParentElement(string serializationLocation)
+        {
+            // find the parent element from its location
+            var parElem = XMLUtils.FindLocation(_baseElement, serializationLocation);
+            if (parElem != null) return parElem;
+
+            // see if the location can be created
+            if (!XMLUtils.CanCreateLocation(_baseElement, serializationLocation))
+                throw new YAXBadLocationException(serializationLocation);
+            
+            // try to create the location
+            parElem = XMLUtils.CreateLocation(_baseElement, serializationLocation);
+            if (parElem == null)
+                throw new YAXBadLocationException(serializationLocation);
+
+            return parElem;
         }
 
         private void SerializeAsValue(MemberWrapper member, object elementValue,
@@ -1019,25 +1057,8 @@ namespace YAXLib
             }
             else
             {
-                foreach (var obj in collectionInst)
-                {
-                    var objToAdd = ReflectionUtils.TryFormatObject(obj, format);
-                    var curElemName = eachElementName;
-
-                    if (curElemName == null) curElemName = colItemsUdt.Alias;
-
-                    var itemElem = AddObjectToElement(elemToAdd, curElemName.OverrideNsIfEmpty(elementName.Namespace),
-                        objToAdd);
-
-                    if (AreOfSameType(obj, colItemType)) continue;
-
-                    // i.e., it has been removed, e.g., because all its members have been serialized outside the element
-                    if (itemElem.Parent == null)
-                        elemToAdd.Add(itemElem); // return it back
-
-                    AddMetadataAttribute(itemElem, Options.Namespace.Uri + Options.AttributeName.RealType,
-                        obj.GetType().FullName, _documentDefaultNamespace);
-                }
+                AddCollectionItems(elemToAdd, elementName, eachElementName, collectionInst, colItemsUdt, format,
+                    colItemType);
             }
 
             var arrayDims = ReflectionUtils.GetArrayDimensions(collectionInst);
@@ -1046,6 +1067,30 @@ namespace YAXLib
                     StringUtils.GetArrayDimsString(arrayDims), _documentDefaultNamespace);
 
             return elemToAdd;
+        }
+
+        private void AddCollectionItems(XElement elemToAdd, XName elementName, XName eachElementName,
+            IEnumerable collectionInst, UdtWrapper colItemsUdt, string format, Type colItemType)
+        {
+            foreach (var obj in collectionInst)
+            {
+                var objToAdd = ReflectionUtils.TryFormatObject(obj, format);
+                var curElemName = eachElementName;
+
+                if (curElemName == null) curElemName = colItemsUdt.Alias;
+
+                var itemElem = AddObjectToElement(elemToAdd, curElemName.OverrideNsIfEmpty(elementName.Namespace),
+                    objToAdd);
+
+                if (AreOfSameType(obj, colItemType)) continue;
+
+                // i.e., it has been removed, e.g., because all its members have been serialized outside the element
+                if (itemElem.Parent == null)
+                    elemToAdd.Add(itemElem); // return it back
+
+                AddMetadataAttribute(itemElem, Options.Namespace.Uri + Options.AttributeName.RealType,
+                    obj.GetType().FullName, _documentDefaultNamespace);
+            }
         }
 
 #nullable enable

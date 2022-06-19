@@ -481,15 +481,12 @@ namespace YAXLib
             return GetRealTypeDefinition(type) != null;
         }
 
+        // Public Methods
 
-        // TODO: move to public methods section
         public YAXTypeAttribute? GetRealTypeDefinition(Type type)
         {
             return _possibleRealTypes.FirstOrDefault(x => ReferenceEquals(x.Type, type));
         }
-
-
-        // Public Methods
 
         /// <summary>
         ///     Gets the original value of this member in the specified object
