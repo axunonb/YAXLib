@@ -411,8 +411,8 @@ namespace YAXLib
 #nullable disable
 
         /// <summary>
-        ///     Sets the base XML element. This method is used when an <c>XMLSerializer</c>
-        ///     instantiates another <c>XMLSerializer</c> to serialize nested objects.
+        ///     Sets the base XML element. This method is used when an <see cref="YAXSerializer"/>
+        ///     instantiates another <see cref="YAXSerializer"/> to serialize nested objects.
         ///     Through this method the child objects have access to the already serialized elements of
         ///     their parent.
         /// </summary>
