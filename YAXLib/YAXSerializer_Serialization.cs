@@ -29,17 +29,7 @@ namespace YAXLib
         {
             return SerializeXDocument(obj).ToString();
         }
-
-        /// <summary>
-        ///     Serializes the specified object and returns an instance of <c>XDocument</c> containing the result.
-        /// </summary>
-        /// <param name="obj">The object to serialize.</param>
-        /// <returns>An instance of <c>XDocument</c> containing the resulting XML</returns>
-        public XDocument SerializeToXDocument(object obj)
-        {
-            return SerializeXDocument(obj);
-        }
-
+        
         /// <summary>
         ///     Serializes the specified object into a <c>TextWriter</c> instance.
         /// </summary>
@@ -60,6 +50,16 @@ namespace YAXLib
             SerializeXDocument(obj).WriteTo(xmlWriter);
         }
 
+        /// <summary>
+        ///     Serializes the specified object and returns an instance of <c>XDocument</c> containing the result.
+        /// </summary>
+        /// <param name="obj">The object to serialize.</param>
+        /// <returns>An instance of <c>XDocument</c> containing the resulting XML</returns>
+        public XDocument SerializeToXDocument(object obj)
+        {
+            return SerializeXDocument(obj);
+        }
+        
         /// <summary>
         ///     Serializes the specified object to file.
         /// </summary>
@@ -216,18 +216,6 @@ namespace YAXLib
         {
             if (!obj.GetType().IsValueType)
                 _serializedStack.Push(obj);
-        }
-
-        /// <summary>
-        ///     Sets the base XML element. This method is used when an <c>XMLSerializer</c>
-        ///     instantiates another <c>XMLSerializer</c> to serialize nested objects.
-        ///     Through this method the child objects have access to the already serialized elements of
-        ///     their parent.
-        /// </summary>
-        /// <param name="baseElement">The base XML element.</param>
-        private void SetBaseElement(XElement baseElement)
-        {
-            _baseElement = baseElement;
         }
 
         /// <summary>
@@ -401,8 +389,11 @@ namespace YAXLib
             
             return false;
         }
-#nullable disable
 
+        /// <summary>
+        ///     Creates a new <see cref="XElement"/> and adds it to the base element.
+        /// </summary>
+        /// <param name="className"></param>
         private void SetBaseElement(XName className)
         {
             if (_baseElement == null)
@@ -411,10 +402,24 @@ namespace YAXLib
             }
             else
             {
-                var baseElem = new XElement(className, null);
+                var baseElem = new XElement(className, default(object?));
                 _baseElement.Add(baseElem);
                 _baseElement = baseElem;
             }
+        }
+
+#nullable disable
+
+        /// <summary>
+        ///     Sets the base XML element. This method is used when an <c>XMLSerializer</c>
+        ///     instantiates another <c>XMLSerializer</c> to serialize nested objects.
+        ///     Through this method the child objects have access to the already serialized elements of
+        ///     their parent.
+        /// </summary>
+        /// <param name="baseElement">The base XML element.</param>
+        private void SetBaseElement(XElement baseElement)
+        {
+            _baseElement = baseElement;
         }
 
         private void SerializeAsElement(MemberWrapper member,
