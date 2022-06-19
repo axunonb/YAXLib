@@ -370,22 +370,6 @@ namespace YAXLib
         }
 
         /// <summary>
-        ///     Are element value and the member declared type the same?
-        /// </summary>
-        /// <param name="obj"></param>
-        /// <param name="member"></param>
-        /// <param name="elementValue"></param>
-        /// <returns></returns>
-        private static bool AreOfSameType(object obj, MemberWrapper member, object elementValue)
-        {
-            var originalValue = member.GetOriginalValue(obj, null);
-            if (elementValue != null && !member.MemberType.EqualsOrIsNullableOf(originalValue.GetType()))
-                return false;
-            
-            return true;
-        }
-
-        /// <summary>
         /// Tests for conditions, where there is nothing to be serialized.
         /// </summary>
         /// <param name="obj"></param>
@@ -1037,22 +1021,22 @@ namespace YAXLib
             {
                 foreach (var obj in collectionInst)
                 {
-                    var objToAdd = format == null ? obj : ReflectionUtils.TryFormatObject(obj, format);
+                    var objToAdd = ReflectionUtils.TryFormatObject(obj, format);
                     var curElemName = eachElementName;
 
                     if (curElemName == null) curElemName = colItemsUdt.Alias;
 
                     var itemElem = AddObjectToElement(elemToAdd, curElemName.OverrideNsIfEmpty(elementName.Namespace),
                         objToAdd);
-                    if (obj != null && !obj.GetType().EqualsOrIsNullableOf(colItemType))
-                    {
-                        // i.e., it has been removed, e.g., because all its members have been serialized outside the element
-                        if (itemElem.Parent == null)
-                            elemToAdd.Add(itemElem); // return it back, or undelete this item
 
-                        AddMetadataAttribute(itemElem, Options.Namespace.Uri + Options.AttributeName.RealType,
-                            obj.GetType().FullName, _documentDefaultNamespace);
-                    }
+                    if (AreOfSameType(obj, colItemType)) continue;
+
+                    // i.e., it has been removed, e.g., because all its members have been serialized outside the element
+                    if (itemElem.Parent == null)
+                        elemToAdd.Add(itemElem); // return it back
+
+                    AddMetadataAttribute(itemElem, Options.Namespace.Uri + Options.AttributeName.RealType,
+                        obj.GetType().FullName, _documentDefaultNamespace);
                 }
             }
 
@@ -1065,6 +1049,30 @@ namespace YAXLib
         }
 
 #nullable enable
+        /// <summary>
+        ///     Are element value and the member declared type the same?
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="member"></param>
+        /// <param name="elementValue"></param>
+        /// <returns></returns>
+        private static bool AreOfSameType(object? obj, MemberWrapper member, object? elementValue)
+        {
+            var originalValue = member.GetOriginalValue(obj, null);
+            return (elementValue == null && originalValue == null) || member.MemberType.EqualsOrIsNullableOf(originalValue.GetType());
+        }
+
+        /// <summary>
+        ///     Are <paramref name="obj"/>object type and type <paramref name="toCompare"/> the same?
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="toCompare"></param>
+        /// <returns></returns>
+        private static bool AreOfSameType(object? obj, Type toCompare)
+        {
+            return obj == null || obj.GetType().EqualsOrIsNullableOf(toCompare);
+        }
+
         private XElement? MakeSerialTypeCollectionElement(XElement insertionLocation, XName elementName, string format,
             IEnumerable collectionInst, UdtWrapper colItemsUdt, string separator)
         {

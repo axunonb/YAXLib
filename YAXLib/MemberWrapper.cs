@@ -495,9 +495,9 @@ namespace YAXLib
         ///     Gets the original value of this member in the specified object
         /// </summary>
         /// <param name="obj">The object whose value corresponding to this instance, must be retreived.</param>
-        /// <param name="index">The array of indeces (usually <c>null</c>).</param>
+        /// <param name="index">The array of indices (usually <c>null</c>).</param>
         /// <returns>the original value of this member in the specified object</returns>
-        public object? GetOriginalValue(object obj, object[]? index)
+        public object? GetOriginalValue(object? obj, object[]? index)
         {
             if (_isProperty)
                 return _propertyInfoInstance?.GetValue(obj, index);
