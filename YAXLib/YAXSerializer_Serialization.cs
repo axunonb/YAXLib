@@ -132,6 +132,7 @@ namespace YAXLib
             return elem;
         }
 
+#nullable enable
         private bool TryUnderlyingTypeAsBasicType(object obj, out XElement? xElement)
         {
             xElement = null;
@@ -142,11 +143,11 @@ namespace YAXLib
             if (_udtWrapper.PreservesWhitespace)
                 XMLUtils.AddPreserveSpaceAttribute(elemResult, Options.Culture);
             if (elemResult.Parent == null)
-                _xmlNamespaceManager.AddNamespacesToElement(elemResult, _documentDefaultNamespace, Options, _udtWrapper);
-            {
-                xElement = elemResult;
-                return true;
-            }
+                _xmlNamespaceManager.AddNamespacesToElement(elemResult, _documentDefaultNamespace, Options,
+                    _udtWrapper);
+                
+            xElement = elemResult;
+            return true;
         }
 
         private bool TryTreatAsCollection(object obj, out XElement? xElement)
@@ -160,10 +161,9 @@ namespace YAXLib
                 XMLUtils.AddPreserveSpaceAttribute(elemResult, Options.Culture);
             if (elemResult.Parent == null)
                 _xmlNamespaceManager.AddNamespacesToElement(elemResult, _documentDefaultNamespace, Options, _udtWrapper);
-            {
-                xElement = elemResult;
-                return true;
-            }
+            
+            xElement = elemResult;
+            return true;
         }
 
         private bool TryTreatAsDictionary(object obj, out XElement? xElement)
@@ -212,6 +212,7 @@ namespace YAXLib
             return true;
         }
 
+#nullable disable
         private void PushObjectToSerializationStack(object obj)
         {
             if (!obj.GetType().IsValueType)
