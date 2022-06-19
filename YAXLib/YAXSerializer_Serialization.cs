@@ -180,10 +180,9 @@ namespace YAXLib
                 XMLUtils.AddPreserveSpaceAttribute(elemResult, Options.Culture);
             if (elemResult.Parent == null)
                 _xmlNamespaceManager.AddNamespacesToElement(elemResult, _documentDefaultNamespace, Options, _udtWrapper);
-            {
-                xElement = elemResult;
-                return true;
-            }
+            
+            xElement = elemResult;
+            return true;
         }
 
         private bool TryUnderlyingTypeIsNotEqualOrNullableOfObjectType(object obj, out XElement? xElement)
@@ -636,7 +635,7 @@ namespace YAXLib
             else if (member.IsKnownType)
             {
                 // TODO: create a functionality to serialize to XAttributes
-                //KnownTypes.Serialize(attrToCreate, member.MemberType);
+                // like "KnownTypes.Serialize(attrToCreate, member.MemberType)"
             }
             else if (isCollectionSerially)
             {
