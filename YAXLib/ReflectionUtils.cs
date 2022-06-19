@@ -388,11 +388,9 @@ namespace YAXLib
             if (self == other)
                 return true;
 
-            Type selfBaseType;
-            Type otherBaseType;
-            if (!IsNullable(self, out selfBaseType))
+            if (!IsNullable(self, out var selfBaseType))
                 selfBaseType = self;
-            if (!IsNullable(other, out otherBaseType))
+            if (!IsNullable(other, out var otherBaseType))
                 otherBaseType = other;
 
             return selfBaseType == otherBaseType;
@@ -580,6 +578,7 @@ namespace YAXLib
             return false;
         }
 
+#nullable enable
         /// <summary>
         ///     Tries to format the specified object using the format string provided.
         ///     If the formatting operation is not applicable, the source object is returned intact.
@@ -588,26 +587,24 @@ namespace YAXLib
         /// <param name="src">The source object.</param>
         /// <param name="format">The format string.</param>
         /// <returns><code>System.String</code> if the format is successful; otherwise, the original object</returns>
-        public static object TryFormatObject(object src, string format)
+        public static object? TryFormatObject(object? src, string? format)
         {
             if (format == null || src == null) return src;
 
-            object formattedObject = null;
+            object formattedObject;
 
             try
             {
                 formattedObject = src.GetType().InvokeMethod("ToString", src, new object[] {format});
-                //formattedObject = src.GetType().InvokeMember("ToString", BindingFlags.InvokeMethod, null, src, new object[] { format });
             }
             catch
             {
                 return src;
-                //throw new YAXInvalidFormatProvided(src.GetType(), format);
-                //this.OnExceptionOccurred(new YAXInvalidFormatProvided(src.GetType(), format), this.m_defaultExceptionType);
             }
 
             return formattedObject ?? src;
         }
+#nullable disable
 
         /// <summary>
         ///     Converts the specified object from a basic type to another type as specified.
