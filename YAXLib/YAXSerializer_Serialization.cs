@@ -1104,7 +1104,8 @@ namespace YAXLib
         private static bool AreOfSameType(object? obj, MemberWrapper member, object? elementValue)
         {
             var originalValue = member.GetOriginalValue(obj, null);
-            return (elementValue == null && originalValue == null) || member.MemberType.EqualsOrIsNullableOf(originalValue.GetType());
+            return (elementValue == null && originalValue == null) 
+                   || (originalValue != null && member.MemberType.EqualsOrIsNullableOf(originalValue.GetType()));
         }
 
         /// <summary>
