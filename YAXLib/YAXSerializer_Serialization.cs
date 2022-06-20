@@ -840,6 +840,45 @@ namespace YAXLib
 
             var elemChild = new XElement(eachElementName, null);
 
+            AddDictionaryKey(keyObj, elemChild, areKeyOfSameType, details);
+
+            AddDictionaryValue(valueObj, elemChild, areValueOfSameType, dontSerializeNull, details);
+
+            return elemChild;
+        }
+
+        private void AddDictionaryValue(object valueObj, XElement elemChild, bool areValueOfSameType, bool dontSerializeNull,
+            (Type keyType, Type valueType, bool isKeyAttrib, bool isValueAttrib, bool isKeyContent, bool isValueContent, string
+                keyFormat, string valueFormat, XName keyAlias, XName valueAlias) details)
+        {
+            if (details.isValueAttrib && areValueOfSameType)
+            {
+                elemChild.AddAttributeNamespaceSafe(details.valueAlias, valueObj, _documentDefaultNamespace, Options.Culture);
+            }
+            else if (details.isValueContent && areValueOfSameType)
+            {
+                elemChild.AddXmlContent(valueObj, Options.Culture);
+            }
+            else if (!(valueObj == null && dontSerializeNull))
+            {
+                var addedElem = AddObjectToElement(elemChild, details.valueAlias, valueObj);
+                if (!areValueOfSameType)
+                {
+                    if (addedElem.Parent == null)
+                        // sometimes empty elements are removed because its members are serialized in
+                        // other elements, therefore we need to make sure to re-add the element.
+                        elemChild.Add(addedElem);
+
+                    AddMetadataAttribute(addedElem, Options.Namespace.Uri + Options.AttributeName.RealType,
+                        valueObj!.GetType().FullName, _documentDefaultNamespace);
+                }
+            }
+        }
+
+        private void AddDictionaryKey(object keyObj, XElement elemChild, bool areKeyOfSameType,
+            (Type keyType, Type valueType, bool isKeyAttrib, bool isValueAttrib, bool isKeyContent, bool isValueContent, string
+                keyFormat, string valueFormat, XName keyAlias, XName valueAlias) details)
+        {
             if (details.isKeyAttrib && areKeyOfSameType)
             {
                 elemChild.AddAttributeNamespaceSafe(details.keyAlias, keyObj, _documentDefaultNamespace, Options.Culture);
@@ -863,31 +902,6 @@ namespace YAXLib
                         keyObj!.GetType().FullName, _documentDefaultNamespace);
                 }
             }
-
-            if (details.isValueAttrib && areValueOfSameType)
-            {
-                elemChild.AddAttributeNamespaceSafe(details.valueAlias, valueObj, _documentDefaultNamespace, Options.Culture);
-            }
-            else if (details.isValueContent && areValueOfSameType)
-            {
-                elemChild.AddXmlContent(valueObj, Options.Culture);
-            }
-            else if (!(valueObj == null && dontSerializeNull))
-            {
-                var addedElem = AddObjectToElement(elemChild, details.valueAlias, valueObj);
-                if (!areValueOfSameType)
-                {
-                    if (addedElem.Parent == null)
-                        // sometimes empty elements are removed because its members are serialized in
-                        // other elements, therefore we need to make sure to re-add the element.
-                        elemChild.Add(addedElem);
-
-                    AddMetadataAttribute(addedElem, Options.Namespace.Uri + Options.AttributeName.RealType,
-                        valueObj!.GetType().FullName, _documentDefaultNamespace);
-                }
-            }
-
-            return elemChild;
         }
 
         private (Type keyType, Type valueType, bool isKeyAttrib, bool isValueAttrib, bool isKeyContent, bool
