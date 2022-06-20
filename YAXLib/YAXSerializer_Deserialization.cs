@@ -176,13 +176,18 @@ namespace YAXLib
             return DeserializeDefault(baseElement);
         }
 
+        /// <summary>
+        /// The default serialization algorithm
+        /// </summary>
+        /// <param name="baseElement"></param>
+        /// <returns>The deserialized object</returns>
         private object DeserializeDefault(XElement baseElement)
         {
             var resultObject = _desObject ?? Activator.CreateInstance(_type, Array.Empty<object>());
 
             foreach (var member in GetFieldsToBeSerialized())
             {
-                if (IsNothingToDeserialize(member)) continue;
+                if (!IsAnythingToDeserialize(member)) continue;
 
                 // reset handled exceptions status
                 _exceptionOccurredDuringMemberDeserialization = false;
@@ -226,13 +231,13 @@ namespace YAXLib
                     RetrieveElementValue(resultObject, member, deserializedValue, xElementValue);
                 }
 
-                CleanUpDefaultDeserialization(isHelperElementCreated, xElementValue, xAttributeValue);
+                RemoveRedundantElements(isHelperElementCreated, xElementValue, xAttributeValue);
             }
 
             return resultObject;
         }
 
-        private void CleanUpDefaultDeserialization(bool isHelperElementCreated, XElement xElementValue,
+        private void RemoveRedundantElements(bool isHelperElementCreated, XElement xElementValue,
             XAttribute xAttributeValue)
         {
             // remove the helper element
@@ -490,15 +495,15 @@ namespace YAXLib
             return deserializedValue;
         }
 
-        private static bool IsNothingToDeserialize(MemberWrapper member)
+        private static bool IsAnythingToDeserialize(MemberWrapper member)
         {
             if (!member.CanWrite)
-                return true;
+                return false;
 
             if (member.IsAttributedAsDontSerialize)
-                return true;
+                return false;
             
-            return false;
+            return true;
         }
 
 #nullable enable
@@ -509,8 +514,8 @@ namespace YAXLib
 
             resultObject = DeserializeCollectionValue(_type, baseElement, _udtWrapper.Alias,
                 _udtWrapper.CollectionAttributeInstance);
-            return true;
 
+            return true;
         }
 
         private bool TryDeserializeAsDictionary(XElement baseElement, out object? resultObject)
@@ -633,12 +638,12 @@ namespace YAXLib
                             && member.MemberType != _type
                         ) // searching for same type objects will lead to infinite loops
                         {
-                            // try to create a fake element 
-                            var fakeElem = XMLUtils.CreateElement(elem, member.SerializationLocation, member.Alias);
-                            if (fakeElem != null)
+                            // try to create a helper element 
+                            var helperElement = XMLUtils.CreateElement(elem, member.SerializationLocation, member.Alias);
+                            if (helperElement != null)
                             {
-                                var memberExists = AtLeastOneOfMembersExists(fakeElem, member.MemberType);
-                                fakeElem.Remove();
+                                var memberExists = AtLeastOneOfMembersExists(helperElement, member.MemberType);
+                                helperElement.Remove();
                                 if (memberExists)
                                     return true;
                             }
