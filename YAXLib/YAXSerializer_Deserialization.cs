@@ -28,13 +28,11 @@ namespace YAXLib
         {
             try
             {
-                using (TextReader tr = new StringReader(input))
-                {
-                    var xdoc = XDocument.Load(tr, GetXmlLoadOptions());
-                    var baseElement = xdoc.Root;
-                    FindDocumentDefaultNamespace();
-                    return DeserializeBase(baseElement);
-                }
+                using TextReader tr = new StringReader(input);
+                var xDocument = XDocument.Load(tr, GetXmlLoadOptions());
+                var baseElement = xDocument.Root;
+                FindDocumentDefaultNamespace();
+                return DeserializeBase(baseElement);
             }
             catch (XmlException ex)
             {
@@ -52,8 +50,8 @@ namespace YAXLib
         {
             try
             {
-                var xdoc = XDocument.Load(xmlReader, GetXmlLoadOptions());
-                var baseElement = xdoc.Root;
+                var xDocument = XDocument.Load(xmlReader, GetXmlLoadOptions());
+                var baseElement = xDocument.Root;
                 FindDocumentDefaultNamespace();
                 return DeserializeBase(baseElement);
             }
@@ -73,8 +71,8 @@ namespace YAXLib
         {
             try
             {
-                var xdoc = XDocument.Load(textReader, GetXmlLoadOptions());
-                var baseElement = xdoc.Root;
+                var xDocument = XDocument.Load(textReader, GetXmlLoadOptions());
+                var baseElement = xDocument.Root;
                 FindDocumentDefaultNamespace();
                 return DeserializeBase(baseElement);
             }
@@ -94,8 +92,8 @@ namespace YAXLib
         {
             try
             {
-                var xdoc = new XDocument();
-                xdoc.Add(element);
+                var xDocument = new XDocument();
+                xDocument.Add(element);
                 FindDocumentDefaultNamespace();
                 return DeserializeBase(element);
             }
@@ -153,294 +151,392 @@ namespace YAXLib
 
             if (baseElement == null) return _desObject;
 
-            var realTypeAttr = baseElement.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.RealType,
-                _documentDefaultNamespace);
-            if (realTypeAttr != null)
-            {
-                var theRealType = ReflectionUtils.GetTypeByName(realTypeAttr.Value);
-                if (theRealType != null)
-                {
-                    _type = theRealType;
-                    _udtWrapper = TypeWrappersPool.Pool.GetTypeWrapper(_type, this);
-                }
-            }
+            ProcessRealTypeAttribute(baseElement);
 
             // HasCustomSerializer must be tested after analyzing any RealType attribute 
             if (_udtWrapper.HasCustomSerializer)
                 return InvokeCustomDeserializerFromElement(_udtWrapper.CustomSerializerType, baseElement, null, _udtWrapper, this);
+
+            // Deserialize objects with special treatment
 
             if (_type.IsGenericType && _type.GetGenericTypeDefinition() == typeof(KeyValuePair<,>))
                 return DeserializeKeyValuePair(baseElement);
 
             if (KnownTypes.IsKnowType(_type)) return KnownTypes.Deserialize(baseElement, _type, TypeNamespace);
 
-            if ((_udtWrapper.IsTreatedAsCollection || _udtWrapper.IsTreatedAsDictionary) &&
-                !IsCreatedToDeserializeANonCollectionMember)
-            {
-                if (_udtWrapper.DictionaryAttributeInstance != null)
-                    return DeserializeTaggedDictionaryValue(baseElement, _udtWrapper.Alias, _type,
-                        _udtWrapper.CollectionAttributeInstance, _udtWrapper.DictionaryAttributeInstance);
-                return DeserializeCollectionValue(_type, baseElement, _udtWrapper.Alias,
-                    _udtWrapper.CollectionAttributeInstance);
-            }
+            if (TryDeserializeAsDictionary(baseElement, out var resultObject)) 
+                return resultObject;
+
+            if (TryDeserializeAsCollection(baseElement, out resultObject)) 
+                return resultObject;
 
             if (ReflectionUtils.IsBasicType(_type)) return ReflectionUtils.ConvertBasicType(baseElement.Value, _type, Options.Culture);
 
-            var o = _desObject ?? Activator.CreateInstance(_type, Array.Empty<object>());
+            // Run the default deserialization algorithm
+            return DeserializeDefault(baseElement);
+        }
+
+        private object DeserializeDefault(XElement baseElement)
+        {
+            var resultObject = _desObject ?? Activator.CreateInstance(_type, Array.Empty<object>());
 
             foreach (var member in GetFieldsToBeSerialized())
             {
-                if (!member.CanWrite)
-                    continue;
-
-                if (member.IsAttributedAsDontSerialize)
-                    continue;
+                if (IsNothingToDeserialize(member)) continue;
 
                 // reset handled exceptions status
                 _exceptionOccurredDuringMemberDeserialization = false;
 
-                var elemValue = string.Empty; // the element value gathered at the first phase
-                XElement xelemValue = null; // the XElement instance gathered at the first phase
-                XAttribute xattrValue = null; // the XAttribute instance gathered at the first phase
+                var deserializedValue = string.Empty; // the element value gathered at the first phase
+                XElement xElementValue = null; // the XElement instance gathered at the first phase
+                XAttribute xAttributeValue = null; // the XAttribute instance gathered at the first phase
 
-                // first evaluate elemValue
-                var createdFakeElement = false;
+                var isHelperElementCreated = false;
 
                 var serializationLocation = member.SerializationLocation;
 
                 if (member.IsSerializedAsAttribute)
                 {
-                    // find the parent element from its location
-                    var attr = XMLUtils.FindAttribute(baseElement, serializationLocation,
-                        member.Alias.OverrideNsIfEmpty(TypeNamespace));
-                    if (attr == null) // if the parent element does not exist
-                    {
-                        // loook for an element with the same name AND a yaxlib:realtype attribute
-                        var elem = XMLUtils.FindElement(baseElement, serializationLocation,
-                            member.Alias.OverrideNsIfEmpty(TypeNamespace));
-                        if (elem != null && elem.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.RealType,
-                            _documentDefaultNamespace) != null)
-                        {
-                            elemValue = elem.Value;
-                            xelemValue = elem;
-                        }
-                        else
-                        {
-                            OnExceptionOccurred(new YAXAttributeMissingException(
-                                    StringUtils.CombineLocationAndElementName(serializationLocation, member.Alias),
-                                    elem ?? baseElement),
-                                !member.MemberType.IsValueType && _udtWrapper.IsNotAllowedNullObjectSerialization
-                                    ? YAXExceptionTypes.Ignore
-                                    : member.TreatErrorsAs);
-                        }
-                    }
-                    else
-                    {
-                        elemValue = attr.Value;
-                        xattrValue = attr;
-                    }
+                    deserializedValue = DeserializeFromAttribute(baseElement, ref xElementValue, ref xAttributeValue, serializationLocation, member);
                 }
                 else if (member.IsSerializedAsValue)
                 {
-                    var elem = XMLUtils.FindLocation(baseElement, serializationLocation);
-                    if (elem == null) // such element is not found
+                    deserializedValue = DeserializeFromValue(baseElement, ref xElementValue, serializationLocation, member);
+                }
+                else
+                {
+                    if (DeserializeFromXmlElement(baseElement, serializationLocation, member, resultObject,
+                            ref deserializedValue, ref isHelperElementCreated, ref xElementValue)) 
+                        continue;
+                }
+
+                // Phase 2: Now try to retrieve deserializedValue,
+                // based on values gathered in xElementValue, xAttributeValue, and deserializedValue
+                if (_exceptionOccurredDuringMemberDeserialization)
+                {
+                    _ = TrySetDefaultValue(baseElement, resultObject, xAttributeValue, xElementValue, member);
+                }
+                else if (member.HasCustomSerializer || member.MemberTypeWrapper.HasCustomSerializer)
+                {
+                    InvokeCustomDeserializer(baseElement, deserializedValue, xElementValue, xAttributeValue,
+                        resultObject, member);
+                }
+                else if (deserializedValue != null)
+                {
+                    RetrieveElementValue(resultObject, member, deserializedValue, xElementValue);
+                }
+
+                CleanUpDefaultDeserialization(isHelperElementCreated, xElementValue, xAttributeValue);
+            }
+
+            return resultObject;
+        }
+
+        private void CleanUpDefaultDeserialization(bool isHelperElementCreated, XElement xElementValue,
+            XAttribute xAttributeValue)
+        {
+            // remove the helper element
+            if (isHelperElementCreated)
+                xElementValue?.Remove();
+
+            if (RemoveDeserializedXmlNodes)
+            {
+                xAttributeValue?.Remove();
+                xElementValue?.Remove();
+            }
+        }
+
+        private void InvokeCustomDeserializer(XElement baseElement, string deserializedValue, XElement xElementValue,
+            XAttribute xAttributeValue, object resultObject, MemberWrapper member)
+        {
+            var customSerializerType = member.HasCustomSerializer
+                ? member.CustomSerializerType
+                : member.MemberTypeWrapper.CustomSerializerType;
+
+            object desObj;
+            if (member.IsSerializedAsAttribute)
+                desObj = InvokeCustomDeserializerFromAttribute(customSerializerType, xAttributeValue, member, _udtWrapper,
+                    this);
+            else if (member.IsSerializedAsElement)
+                desObj = InvokeCustomDeserializerFromElement(customSerializerType, xElementValue,
+                    member.HasCustomSerializer ? member : null,
+                    member.MemberTypeWrapper.HasCustomSerializer ? member.MemberTypeWrapper : null,
+                    this);
+            else if (member.IsSerializedAsValue)
+                desObj = InvokeCustomDeserializerFromValue(customSerializerType, deserializedValue, member, _udtWrapper, this);
+            else
+                throw new Exception("unknown situation");
+
+            try
+            {
+                member.SetValue(resultObject, desObj);
+            }
+            catch
+            {
+                OnExceptionOccurred(
+                    new YAXPropertyCannotBeAssignedTo(member.Alias.LocalName,
+                        xAttributeValue ?? xElementValue ?? baseElement as IXmlLineInfo), Options.ExceptionBehavior);
+            }
+        }
+
+        private bool TrySetDefaultValue(XElement baseElement, object resultObject, XAttribute xAttributeValue,
+            XElement xElementValue, MemberWrapper member)
+        {
+            // i.e. if it was NOT resuming deserialization,
+            if (_desObject != null) 
+                return false;
+            
+            // set default value, otherwise existing value for the member is kept
+
+            if (!member.MemberType.IsValueType && _udtWrapper.IsNotAllowedNullObjectSerialization)
+            {
+                try
+                {
+                    member.SetValue(resultObject, null);
+                }
+                catch
+                {
+                    OnExceptionOccurred(
+                        new YAXDefaultValueCannotBeAssigned(member.Alias.LocalName, member.DefaultValue,
+                            xAttributeValue ?? xElementValue ?? baseElement as IXmlLineInfo, Options.Culture),
+                        Options.ExceptionBehavior);
+                    return false;
+                }
+                return true;
+            }
+            
+            if (member.DefaultValue != null)
+            {
+                try
+                {
+                    member.SetValue(resultObject, member.DefaultValue);
+                }
+                catch
+                {
+                    OnExceptionOccurred(
+                        new YAXDefaultValueCannotBeAssigned(member.Alias.LocalName, member.DefaultValue,
+                            xAttributeValue ?? xElementValue ?? baseElement as IXmlLineInfo, Options.Culture),
+                        Options.ExceptionBehavior);
+                    return false;
+                }
+
+                return true;
+            }
+
+            if (!member.MemberType.IsValueType)
+            {
+                member.SetValue(resultObject, null);
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool DeserializeFromXmlElement(XElement baseElement, string serializationLocation, MemberWrapper member, object resultObject,
+            ref string deserializedValue, ref bool isHelperElementCreated, ref XElement xElementValue)
+        {
+            // member is serialized as an xml element
+
+            var canContinue = false;
+            var elem = XMLUtils.FindElement(baseElement, serializationLocation,
+                member.Alias.OverrideNsIfEmpty(TypeNamespace));
+
+            if (elem != null)
+            {
+                deserializedValue = elem.Value;
+                xElementValue = elem;
+                return false;
+            }
+
+            // no such element was found yet
+
+            if ((member.IsTreatedAsCollection || member.IsTreatedAsDictionary) &&
+                member.CollectionAttributeInstance is
+                    { SerializationType: YAXCollectionSerializationTypes.RecursiveWithNoContainingElement })
+            {
+                if (AtLeastOneOfCollectionMembersExists(baseElement, member))
+                {
+                    elem = baseElement;
+                    canContinue = true;
+                }
+                else
+                {
+                    member.SetValue(resultObject, member.DefaultValue);
+                    return true;
+                }
+            }
+            else if (!ReflectionUtils.IsBasicType(member.MemberType) && !member.IsTreatedAsCollection &&
+                     !member.IsTreatedAsDictionary)
+            {
+                // try to fix this problem by creating a helper element, maybe all its children are placed somewhere else
+                var helperElement = XMLUtils.CreateElement(baseElement, serializationLocation,
+                    member.Alias.OverrideNsIfEmpty(TypeNamespace));
+                if (helperElement != null)
+                {
+                    isHelperElementCreated = true;
+                    if (AtLeastOneOfMembersExists(helperElement, member.MemberType))
                     {
-                        OnExceptionOccurred(new YAXElementMissingException(
-                                serializationLocation, baseElement),
+                        canContinue = true;
+                        elem = helperElement;
+                        deserializedValue = elem.Value;
+                    }
+                }
+            }
+            else if (_udtWrapper.IsNotAllowedNullObjectSerialization && member.DefaultValue is null)
+            {
+                // Any missing elements are allowed for deserialization:
+                // * Don't set a value - uses default or initial value
+                // * Ignore member.TreatErrorsAs
+                // * Don't register YAXElementMissingException
+                // * Skip Phase 2
+                return true;
+            }
+
+            if (!canContinue)
+                OnExceptionOccurred(new YAXElementMissingException(
+                        StringUtils.CombineLocationAndElementName(serializationLocation,
+                            member.Alias.OverrideNsIfEmpty(TypeNamespace)), baseElement),
+                    !member.MemberType.IsValueType && _udtWrapper.IsNotAllowedNullObjectSerialization
+                        ? YAXExceptionTypes.Ignore
+                        : member.TreatErrorsAs);
+
+            xElementValue = elem;
+            return false;
+        }
+
+        private string DeserializeFromValue(XElement baseElement, ref XElement xElementValue, string serializationLocation,
+            MemberWrapper member)
+        {
+            var deserializedValue = string.Empty;
+            var elem = XMLUtils.FindLocation(baseElement, serializationLocation);
+            if (elem == null) // no such element is was found
+            {
+                OnExceptionOccurred(new YAXElementMissingException(
+                        serializationLocation, baseElement),
+                    !member.MemberType.IsValueType && _udtWrapper.IsNotAllowedNullObjectSerialization
+                        ? YAXExceptionTypes.Ignore
+                        : member.TreatErrorsAs);
+            }
+            else
+            {
+                var values = elem.Nodes().OfType<XText>().ToArray();
+                if (values.Length <= 0)
+                {
+                    // look for an element with the same name AND a yaxlib:realtype attribute
+                    var innerElement = XMLUtils.FindElement(baseElement, serializationLocation,
+                        member.Alias.OverrideNsIfEmpty(TypeNamespace));
+                    if (innerElement != null &&
+                        innerElement.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.RealType,
+                            _documentDefaultNamespace) != null)
+                    {
+                        deserializedValue = innerElement.Value;
+                        xElementValue = innerElement;
+                    }
+                    else
+                    {
+                        OnExceptionOccurred(
+                            new YAXElementValueMissingException(serializationLocation,
+                                innerElement ?? baseElement),
                             !member.MemberType.IsValueType && _udtWrapper.IsNotAllowedNullObjectSerialization
                                 ? YAXExceptionTypes.Ignore
                                 : member.TreatErrorsAs);
                     }
-                    else
-                    {
-                        var values = elem.Nodes().OfType<XText>().ToArray();
-                        if (values.Length <= 0)
-                        {
-                            // look for an element with the same name AND a yaxlib:realtype attribute
-                            var innerelem = XMLUtils.FindElement(baseElement, serializationLocation,
-                                member.Alias.OverrideNsIfEmpty(TypeNamespace));
-                            if (innerelem != null &&
-                                innerelem.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.RealType,
-                                    _documentDefaultNamespace) != null)
-                            {
-                                elemValue = innerelem.Value;
-                                xelemValue = innerelem;
-                            }
-                            else
-                            {
-                                OnExceptionOccurred(
-                                    new YAXElementValueMissingException(serializationLocation,
-                                        innerelem ?? baseElement),
-                                    !member.MemberType.IsValueType && _udtWrapper.IsNotAllowedNullObjectSerialization
-                                        ? YAXExceptionTypes.Ignore
-                                        : member.TreatErrorsAs);
-                            }
-                        }
-                        else
-                        {
-                            elemValue = values[0].Value;
-                            values[0].Remove();
-                        }
-                    }
                 }
-                else // if member is serialized as an xml element
+                else
                 {
-                    var canContinue = false;
-                    var elem = XMLUtils.FindElement(baseElement, serializationLocation,
-                        member.Alias.OverrideNsIfEmpty(TypeNamespace));
-
-                    if (elem == null) // such element is not found
-                    {
-                        if ((member.IsTreatedAsCollection || member.IsTreatedAsDictionary) &&
-                            member.CollectionAttributeInstance != null &&
-                            member.CollectionAttributeInstance.SerializationType ==
-                            YAXCollectionSerializationTypes.RecursiveWithNoContainingElement)
-                        {
-                            if (AtLeastOneOfCollectionMembersExists(baseElement, member))
-                            {
-                                elem = baseElement;
-                                canContinue = true;
-                            }
-                            else
-                            {
-                                member.SetValue(o, member.DefaultValue);
-                                continue;
-                            }
-                        }
-                        else if (!ReflectionUtils.IsBasicType(member.MemberType) && !member.IsTreatedAsCollection &&
-                                 !member.IsTreatedAsDictionary)
-                        {
-                            // try to fix this problem by creating a fake element, maybe all its children are placed somewhere else
-                            var fakeElem = XMLUtils.CreateElement(baseElement, serializationLocation,
-                                member.Alias.OverrideNsIfEmpty(TypeNamespace));
-                            if (fakeElem != null)
-                            {
-                                createdFakeElement = true;
-                                if (AtLeastOneOfMembersExists(fakeElem, member.MemberType))
-                                {
-                                    canContinue = true;
-                                    elem = fakeElem;
-                                    elemValue = elem.Value;
-                                }
-                            }
-                        }
-                        else if (_udtWrapper.IsNotAllowedNullObjectSerialization && member.DefaultValue is null)
-                        {
-                            // Any missing elements are allowed for deserialization:
-                            // * Don't set a value - uses default or initial value
-                            // * Ignore member.TreatErrorsAs
-                            // * Don't register YAXElementMissingException
-                            // * Skip Phase 2
-                            continue;
-                        }
-
-                        if (!canContinue)
-                            OnExceptionOccurred(new YAXElementMissingException(
-                                    StringUtils.CombineLocationAndElementName(serializationLocation,
-                                        member.Alias.OverrideNsIfEmpty(TypeNamespace)), baseElement),
-                                !member.MemberType.IsValueType && _udtWrapper.IsNotAllowedNullObjectSerialization
-                                    ? YAXExceptionTypes.Ignore
-                                    : member.TreatErrorsAs);
-                    }
-                    else
-                    {
-                        elemValue = elem.Value;
-                    }
-
-                    xelemValue = elem;
-                }
-
-                // Phase 2: Now try to retrieve elemValue's value, based on values gathered in xelemValue, xattrValue, and elemValue
-                if (_exceptionOccurredDuringMemberDeserialization)
-                {
-                    if (_desObject == null
-                    ) // i.e. if it was NOT resuming de-serialization, set default value, otherwise existing value for the member is kept
-                    {
-                        if (!member.MemberType.IsValueType && _udtWrapper.IsNotAllowedNullObjectSerialization)
-                        {
-                            try
-                            {
-                                member.SetValue(o, null);
-                            }
-                            catch
-                            {
-                                OnExceptionOccurred(
-                                    new YAXDefaultValueCannotBeAssigned(member.Alias.LocalName, member.DefaultValue,
-
-                                        xattrValue ?? xelemValue ?? baseElement as IXmlLineInfo, Options.Culture),
-                                    Options.ExceptionBehavior);
-                            }
-                        }
-                        else if (member.DefaultValue != null)
-                        {
-                            try
-                            {
-                                member.SetValue(o, member.DefaultValue);
-                            }
-                            catch
-                            {
-                                OnExceptionOccurred(
-                                    new YAXDefaultValueCannotBeAssigned(member.Alias.LocalName, member.DefaultValue,
-
-                                        xattrValue ?? xelemValue ?? baseElement as IXmlLineInfo, Options.Culture),
-                                    Options.ExceptionBehavior);
-                            }
-                        }
-                        else
-                        {
-                            if (!member.MemberType.IsValueType)
-                                member.SetValue(o, null /*the value to be assigned */);
-                        }
-                    }
-                }
-                else if (member.HasCustomSerializer || member.MemberTypeWrapper.HasCustomSerializer)
-                {
-                    var deserType = member.HasCustomSerializer
-                        ? member.CustomSerializerType
-                        : member.MemberTypeWrapper.CustomSerializerType;
-
-                    object desObj;
-                    if (member.IsSerializedAsAttribute)
-                        desObj = InvokeCustomDeserializerFromAttribute(deserType, xattrValue, member, _udtWrapper, this);
-                    else if (member.IsSerializedAsElement)
-                        desObj = InvokeCustomDeserializerFromElement(deserType, xelemValue, 
-                            member.HasCustomSerializer ? member : null,
-                            member.MemberTypeWrapper.HasCustomSerializer ? member.MemberTypeWrapper : null,
-                            this);
-                    else if (member.IsSerializedAsValue)
-                        desObj = InvokeCustomDeserializerFromValue(deserType, elemValue, member, _udtWrapper, this);
-                    else
-                        throw new Exception("unknown situation");
-
-                    try
-                    {
-                        member.SetValue(o, desObj);
-                    }
-                    catch
-                    {
-                        OnExceptionOccurred(
-                            new YAXPropertyCannotBeAssignedTo(member.Alias.LocalName,
-                                xattrValue ?? xelemValue ?? baseElement as IXmlLineInfo), Options.ExceptionBehavior);
-                    }
-                }
-                else if (elemValue != null)
-                {
-                    RetrieveElementValue(o, member, elemValue, xelemValue);
-                }
-
-                if (createdFakeElement && xelemValue != null)
-                    // remove the fake element
-                    xelemValue.Remove();
-
-                if (RemoveDeserializedXmlNodes)
-                {
-                    if (xattrValue != null) xattrValue.Remove();
-                    else if (xelemValue != null) xelemValue.Remove();
+                    deserializedValue = values[0].Value;
+                    values[0].Remove();
                 }
             }
 
+            return deserializedValue;
+        }
 
-            return o;
+        private string DeserializeFromAttribute(XElement baseElement, ref XElement xElementValue,
+            ref XAttribute xAttributeValue, string serializationLocation, MemberWrapper member)
+        {
+            var deserializedValue = string.Empty;
+
+            // find the parent element from its location
+            var attr = XMLUtils.FindAttribute(baseElement, serializationLocation,
+                member.Alias.OverrideNsIfEmpty(TypeNamespace));
+            if (attr == null) // if the parent element does not exist
+            {
+                // look for an element with the same name AND a yaxlib:realtype attribute
+                var elem = XMLUtils.FindElement(baseElement, serializationLocation,
+                    member.Alias.OverrideNsIfEmpty(TypeNamespace));
+                if (elem != null && elem.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.RealType,
+                        _documentDefaultNamespace) != null)
+                {
+                    deserializedValue = elem.Value;
+                    xElementValue = elem;
+                }
+                else
+                {
+                    OnExceptionOccurred(new YAXAttributeMissingException(
+                            StringUtils.CombineLocationAndElementName(serializationLocation, member.Alias),
+                            elem ?? baseElement),
+                        !member.MemberType.IsValueType && _udtWrapper.IsNotAllowedNullObjectSerialization
+                            ? YAXExceptionTypes.Ignore
+                            : member.TreatErrorsAs);
+                }
+            }
+            else
+            {
+                deserializedValue = attr.Value;
+                xAttributeValue = attr;
+            }
+
+            return deserializedValue;
+        }
+
+        private static bool IsNothingToDeserialize(MemberWrapper member)
+        {
+            if (!member.CanWrite)
+                return true;
+
+            if (member.IsAttributedAsDontSerialize)
+                return true;
+            
+            return false;
+        }
+
+#nullable enable
+        private bool TryDeserializeAsCollection(XElement baseElement, out object? resultObject)
+        {
+            resultObject = null;
+            if (!_udtWrapper.IsTreatedAsCollection || IsCreatedToDeserializeANonCollectionMember) return false;
+
+            resultObject = DeserializeCollectionValue(_type, baseElement, _udtWrapper.Alias,
+                _udtWrapper.CollectionAttributeInstance);
+            return true;
+
+        }
+
+        private bool TryDeserializeAsDictionary(XElement baseElement, out object? resultObject)
+        {
+            resultObject = null;
+            if (!_udtWrapper.IsTreatedAsDictionary || IsCreatedToDeserializeANonCollectionMember) return false;
+            if (_udtWrapper.DictionaryAttributeInstance == null) return false;
+
+            resultObject = DeserializeTaggedDictionaryValue(baseElement, _udtWrapper.Alias, _type,
+                _udtWrapper.CollectionAttributeInstance, _udtWrapper.DictionaryAttributeInstance);
+            return true;
+        }
+#nullable disable
+
+        private void ProcessRealTypeAttribute(XElement baseElement)
+        {
+            var realTypeAttr = baseElement.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.RealType,
+                _documentDefaultNamespace);
+            
+            if (realTypeAttr == null) return;
+
+            var theRealType = ReflectionUtils.GetTypeByName(realTypeAttr.Value);
+            if (theRealType == null) return;
+
+            _type = theRealType;
+            _udtWrapper = TypeWrappersPool.Pool.GetTypeWrapper(_type, this);
         }
 
         /// <summary>

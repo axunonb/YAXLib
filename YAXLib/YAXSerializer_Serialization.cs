@@ -114,13 +114,13 @@ namespace YAXLib
 
             FindDocumentDefaultNamespace();
 
-            if (TryTreatAsDictionary(obj, out var xElement)) return xElement;
+            if (TrySerializeAsDictionary(obj, out var xElement)) return xElement;
 
-            if (TryTreatAsCollection(obj, out xElement)) return xElement;
+            if (TrySerializeAsCollection(obj, out xElement)) return xElement;
 
-            if (TryUnderlyingTypeAsBasicType(obj, out xElement)) return xElement;
+            if (TrySerializeUnderlyingTypeAsBasicType(obj, out xElement)) return xElement;
 
-            if (TryUnderlyingTypeIsNotEqualOrNullableOfObjectType(obj, out xElement)) return xElement;
+            if (TrySerializeUnderlyingTypeIfNotEqualOrNullableOfObjectType(obj, out xElement)) return xElement;
 
             // SerializeBase will add the object to the stack
             var elem = SerializeBase(obj, _udtWrapper.Alias);
@@ -133,7 +133,7 @@ namespace YAXLib
         }
 
 #nullable enable
-        private bool TryUnderlyingTypeAsBasicType(object obj, out XElement? xElement)
+        private bool TrySerializeUnderlyingTypeAsBasicType(object obj, out XElement? xElement)
         {
             xElement = null;
 
@@ -150,7 +150,7 @@ namespace YAXLib
             return true;
         }
 
-        private bool TryTreatAsCollection(object obj, out XElement? xElement)
+        private bool TrySerializeAsCollection(object obj, out XElement? xElement)
         {
             xElement = null;
 
@@ -166,7 +166,7 @@ namespace YAXLib
             return true;
         }
 
-        private bool TryTreatAsDictionary(object obj, out XElement? xElement)
+        private bool TrySerializeAsDictionary(object obj, out XElement? xElement)
         {
             xElement = null;
 
@@ -185,7 +185,7 @@ namespace YAXLib
             return true;
         }
 
-        private bool TryUnderlyingTypeIsNotEqualOrNullableOfObjectType(object obj, out XElement? xElement)
+        private bool TrySerializeUnderlyingTypeIfNotEqualOrNullableOfObjectType(object obj, out XElement? xElement)
         {
             xElement = null;
 
