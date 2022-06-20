@@ -342,6 +342,16 @@ namespace YAXLib
         }
 
         /// <summary>
+        ///     Gets the sequence of fields to be serialized or to be deserialized for the serializer's underlying type.
+        ///     This sequence is retrieved according to the field-types specified by the user.
+        /// </summary>
+        /// <returns>The sequence of fields to be de/serialized for the serializer's underlying type.</returns>
+        private IEnumerable<MemberWrapper> GetFieldsToBeSerialized()
+        {
+            return GetFieldsToBeSerialized(_udtWrapper).OrderBy(t => t.Order);
+        }
+
+        /// <summary>
         ///     Gets the sequence of fields to be serialized or to be deserialized for the specified type.
         ///     This sequence is retrieved according to the field-types specified by the user.
         /// </summary>
@@ -373,7 +383,6 @@ namespace YAXLib
             var name0 = member.Name[0];
             return (char.IsLetter(name0) || name0 == '_') &&
                     (member.MemberType == MemberTypes.Property || member.MemberType == MemberTypes.Field);
-
         }
 
         private static bool CanSerializeProperty(PropertyInfo prop)
@@ -387,16 +396,6 @@ namespace YAXLib
                 return false;
 
             return true;
-        }
-
-        /// <summary>
-        ///     Gets the sequence of fields to be serialized or to be deserialized for the serializer's underlying type.
-        ///     This sequence is retrieved according to the field-types specified by the user.
-        /// </summary>
-        /// <returns>The sequence of fields to be de/serialized for the serializer's underlying type.</returns>
-        private IEnumerable<MemberWrapper> GetFieldsToBeSerialized()
-        {
-            return GetFieldsToBeSerialized(_udtWrapper).OrderBy(t => t.Order);
         }
 
         /// <summary>
