@@ -355,33 +355,38 @@ namespace YAXLib
             foreach (var member in typeWrapper.UnderlyingType.GetMembers(BindingFlags.Instance |
                                                                          BindingFlags.NonPublic | BindingFlags.Public))
             {
-                var name0 = member.Name[0];
-                if ((char.IsLetter(name0) ||
-                     name0 == '_'
-                    ) && // TODO: this is wrong, .NET supports unicode variable names or those starting with @
-                    (member.MemberType == MemberTypes.Property || member.MemberType == MemberTypes.Field))
-                {
-                    var prop = member as PropertyInfo;
-                    if (prop != null)
-                    {
-                        // ignore indexers; if member is an indexer property, do not serialize it
-                        if (prop.GetIndexParameters().Length > 0)
-                            continue;
+                if (!IsValidPropertyOrField(member)) continue;
+                if (member is PropertyInfo prop && !CanSerializeProperty(prop)) continue;
 
-                        // don't serialize delegates as well
-                        if (ReflectionUtils.IsTypeEqualOrInheritedFromType(prop.PropertyType, typeof(Delegate)))
-                            continue;
-                    }
+                if (typeWrapper.IsCollectionType || typeWrapper.IsDictionaryType)
+                    if (ReflectionUtils.IsPartOfNetFx(member))
+                        continue;
 
-                    if (typeWrapper.IsCollectionType || typeWrapper.IsDictionaryType) //&& typeWrapper.IsAttributedAsNotCollection)
-                        if (ReflectionUtils.IsPartOfNetFx(member))
-                            continue;
-
-                    var memInfo = new MemberWrapper(member, this);
-                    if (memInfo.IsAllowedToBeSerialized(typeWrapper.FieldsToSerialize,
+                var memInfo = new MemberWrapper(member, this);
+                if (memInfo.IsAllowedToBeSerialized(typeWrapper.FieldsToSerialize,
                         _udtWrapper.DoNotSerializePropertiesWithNoSetter)) yield return memInfo;
-                }
             }
+        }
+
+        private static bool IsValidPropertyOrField(MemberInfo member)
+        {
+            var name0 = member.Name[0];
+            return (char.IsLetter(name0) || name0 == '_') &&
+                    (member.MemberType == MemberTypes.Property || member.MemberType == MemberTypes.Field);
+
+        }
+
+        private static bool CanSerializeProperty(PropertyInfo prop)
+        {
+            // ignore indexers; if member is an indexer property, do not serialize it
+            if (prop.GetIndexParameters().Length > 0)
+                return false;
+
+            // don't serialize delegates as well
+            if (ReflectionUtils.IsTypeEqualOrInheritedFromType(prop.PropertyType, typeof(Delegate)))
+                return false;
+
+            return true;
         }
 
         /// <summary>
