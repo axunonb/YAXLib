@@ -602,61 +602,43 @@ namespace YAXLib
 
             foreach (var member in GetFieldsToBeSerialized(typeWrapper))
             {
-                if (!member.CanWrite)
-                    continue;
+                if (!IsAnythingToDeserialize(member)) continue;
 
-                // ignore this member if it is attributed as dont serialize
-                if (member.IsAttributedAsDontSerialize)
-                    continue;
+                if (CanProcessAttribute(elem, member)) return true;
 
-                if (member.IsSerializedAsAttribute)
-                {
-                    // find the parent element from its location
-                    var attr = XMLUtils.FindAttribute(elem, member.SerializationLocation, member.Alias);
-                    if (attr == null)
-                    {
-                        // maybe it has got a realtype attribute and hence have turned into an element
-                        var theElem = XMLUtils.FindElement(elem, member.SerializationLocation, member.Alias);
-                        if (theElem != null &&
-                            theElem.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.RealType,
-                                _documentDefaultNamespace) != null)
-                            return true;
-                    }
-                    else
-                    {
-                        return true;
-                    }
-                }
-                else
-                {
-                    var xelem = XMLUtils.FindElement(elem, member.SerializationLocation, member.Alias);
-                    if (xelem == null)
-                    {
-                        if (!ReflectionUtils.IsBasicType(member.MemberType)
-                            && !member.IsTreatedAsCollection
-                            && !member.IsTreatedAsDictionary
-                            && member.MemberType != _type
-                        ) // searching for same type objects will lead to infinite loops
-                        {
-                            // try to create a helper element 
-                            var helperElement = XMLUtils.CreateElement(elem, member.SerializationLocation, member.Alias);
-                            if (helperElement != null)
-                            {
-                                var memberExists = AtLeastOneOfMembersExists(helperElement, member.MemberType);
-                                helperElement.Remove();
-                                if (memberExists)
-                                    return true;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        return true;
-                    }
-                }
+                // No attribute, so there should be an element
+
+                if (XMLUtils.FindElement(elem, member.SerializationLocation, member.Alias) != null)
+                    return true;
+
+                if (ReflectionUtils.IsBasicType(member.MemberType) || member.IsTreatedAsCollection ||
+                    member.IsTreatedAsDictionary || member.MemberType == _type) continue;
+
+                // try to create a helper element 
+                var helperElement = XMLUtils.CreateElement(elem, member.SerializationLocation, member.Alias);
+                if (helperElement == null) continue;
+
+                var memberExists = AtLeastOneOfMembersExists(helperElement, member.MemberType);
+                helperElement.Remove();
+                return memberExists;
             }
 
             return false;
+        }
+
+        private bool CanProcessAttribute(XElement xElement, MemberWrapper member)
+        {
+            if (!member.IsSerializedAsAttribute) return false;
+
+            // find the parent element from its location
+            var attr = XMLUtils.FindAttribute(xElement, member.SerializationLocation, member.Alias);
+            if (attr != null)
+                return true;
+
+            // maybe it has got a realtype attribute and hence have turned into an element
+            var elem = XMLUtils.FindElement(xElement, member.SerializationLocation, member.Alias);
+            return elem?.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.RealType,
+                _documentDefaultNamespace) != null;
         }
 
         /// <summary>
