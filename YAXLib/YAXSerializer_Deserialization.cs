@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Xml;
 using System.Xml.Linq;
 using YAXLib.Attributes;
@@ -1307,64 +1308,65 @@ namespace YAXLib
         /// <summary>
         ///     Verifies the existence of dictionary pair <c>Key</c> and <c>Value</c> elements.
         /// </summary>
-        /// <param name="keyType">Type of the key.</param>
-        /// <param name="isKeyAttrib">if set to <see langword="true" /> means that key has been serialize as an attribute.</param>
-        /// <param name="isKeyContent">if set to <see langword="true" /> means that key has been serialize as an XML content.</param>
-        /// <param name="keyAlias">The alias for <c>Key</c>.</param>
+        /// <param name="type">Type of the key or content.</param>
+        /// <param name="isAttribute">if set to <see langword="true" /> means that key or content have been serialize as an attribute.</param>
+        /// <param name="isContent">if set to <see langword="true" /> means that key or content has been serialize as an XML content.</param>
+        /// <param name="alias">The alias for the key or content.</param>
         /// <param name="childElem">The child XML element to search <c>Key</c> and <c>Value</c> elements in.</param>
-        /// <returns></returns>
-        private bool VerifyDictionaryPairElements(ref Type keyType, ref bool isKeyAttrib, ref bool isKeyContent,
-            XName keyAlias, XElement childElem)
+        /// <returns><ref langword="true"/> if the elements were found.</returns>
+        private bool VerifyDictionaryPairElements(ref Type type, ref bool isAttribute, ref bool isContent,
+            XName alias, XElement childElem)
         {
-            var isKeyFound = false;
+            bool isFound;
 
-            if (isKeyAttrib && childElem.Attribute_NamespaceSafe(keyAlias, _documentDefaultNamespace) != null)
+            if (isAttribute && childElem.Attribute_NamespaceSafe(alias, _documentDefaultNamespace) != null)
             {
-                isKeyFound = true;
+                isFound = true;
             }
-            else if (isKeyContent && childElem.GetXmlContent() != null)
+            else if (isContent && childElem.GetXmlContent() != null)
             {
-                isKeyFound = true;
-            }
-            else if (isKeyAttrib || isKeyContent)
-            {
-                // look for an element with the same name AND a yaxlib:realtype attribute
-                var elem = childElem.Element(keyAlias);
-                if (elem != null)
-                {
-                    var realTypeAttr = elem.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.RealType,
-                        _documentDefaultNamespace);
-                    if (realTypeAttr != null)
-                    {
-                        var theRealType = ReflectionUtils.GetTypeByName(realTypeAttr.Value);
-                        if (theRealType != null)
-                        {
-                            keyType = theRealType;
-                            isKeyAttrib = false;
-                            isKeyContent = false;
-                            isKeyFound = true;
-                        }
-                    }
-                }
+                isFound = true;
             }
             else
             {
-                var elem = childElem.Element(keyAlias);
-                if (elem != null)
-                {
-                    isKeyFound = true;
-
-                    var realTypeAttr = elem.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.RealType,
-                        _documentDefaultNamespace);
-                    if (realTypeAttr != null)
-                    {
-                        var theRealType = ReflectionUtils.GetTypeByName(realTypeAttr.Value);
-                        if (theRealType != null) keyType = theRealType;
-                    }
-                }
+                isFound = VerifyDictionaryPairElementsInChild(ref type, ref isAttribute,  ref isContent, alias, childElem);
             }
 
-            return isKeyFound;
+            return isFound;
+        }
+
+        /// <summary>
+        ///     Verifies the existence of a child dictionary pair <c>Key</c> and <c>Value</c> element.
+        ///     Here we look for an element with the same name.
+        ///     If it is found, we also check for a yaxlib:realtype attribute to get the real type.
+        /// </summary>
+        /// <param name="type">Type of the key or content.</param>
+        /// <param name="isAttribute">if set to <see langword="true" /> means that key or content have been serialize as an attribute.</param>
+        /// <param name="isContent">if set to <see langword="true" /> means that key or content has been serialize as an XML content.</param>
+        /// <param name="alias">The alias for the key or content.</param>
+        /// <param name="childElem">The child XML element to search <c>Key</c> and <c>Value</c> elements in.</param>
+        /// <returns><ref langword="true"/> if the elements were found.</returns>
+        private bool VerifyDictionaryPairElementsInChild(ref Type type, ref bool isAttribute, ref bool isContent, XName alias,
+            XElement childElem)
+        {
+            var elem = childElem.Element(alias);
+            if (elem == null) return false;
+
+            var realTypeAttr = elem.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.RealType,
+                _documentDefaultNamespace);
+
+            if (realTypeAttr == null) 
+                return true; // we found a child element (but without yaxlib:realtype attribute)
+
+            var theRealType = ReflectionUtils.GetTypeByName(realTypeAttr.Value);
+            if (theRealType != null)
+            {
+                isAttribute = false;
+                isContent = false;
+                type = theRealType;
+            }
+
+            return true; // we found a child element (but without finding the real type)
         }
 
         /// <summary>
@@ -1379,8 +1381,8 @@ namespace YAXLib
             var keyType = genArgs[0];
             var valueType = genArgs[1];
 
-            var xnameKey = TypeNamespace.IfEmptyThenNone() + "Key";
-            var xnameValue = TypeNamespace.IfEmptyThenNone() + "Value";
+            var xNameKey = TypeNamespace.IfEmptyThenNone() + "Key";
+            var xNameValue = TypeNamespace.IfEmptyThenNone() + "Value";
 
             object keyValue, valueValue;
             if (ReflectionUtils.IsBasicType(keyType))
@@ -1388,7 +1390,7 @@ namespace YAXLib
                 try
                 {
                     keyValue = ReflectionUtils.ConvertBasicType(
-                        baseElement.Element(xnameKey).Value, keyType, Options.Culture);
+                        baseElement.Element(xNameKey)?.Value, keyType, Options.Culture);
                 }
                 catch (NullReferenceException)
                 {
@@ -1397,17 +1399,17 @@ namespace YAXLib
             }
             else if (ReflectionUtils.IsStringConvertibleIFormattable(keyType))
             {
-                keyValue = Activator.CreateInstance(keyType, baseElement.Element(xnameKey).Value);
+                keyValue = Activator.CreateInstance(keyType, baseElement.Element(xNameKey)?.Value);
             }
             else if (ReflectionUtils.IsCollectionType(keyType))
             {
                 keyValue = DeserializeCollectionValue(keyType,
-                    baseElement.Element(xnameKey), xnameKey, null);
+                    baseElement.Element(xNameKey), xNameKey, null);
             }
             else
             {
-                var ser = NewInternalSerializer(keyType, xnameKey.Namespace.IfEmptyThenNone(), null);
-                keyValue = ser.DeserializeBase(baseElement.Element(xnameKey));
+                var ser = NewInternalSerializer(keyType, xNameKey.Namespace.IfEmptyThenNone(), null);
+                keyValue = ser.DeserializeBase(baseElement.Element(xNameKey));
                 FinalizeNewSerializer(ser, false);
             }
 
@@ -1415,7 +1417,7 @@ namespace YAXLib
             {
                 try
                 {
-                    valueValue = ReflectionUtils.ConvertBasicType(baseElement.Element(xnameValue).Value, valueType, Options.Culture);
+                    valueValue = ReflectionUtils.ConvertBasicType(baseElement.Element(xNameValue)?.Value, valueType, Options.Culture);
                 }
                 catch (NullReferenceException)
                 {
@@ -1424,17 +1426,17 @@ namespace YAXLib
             }
             else if (ReflectionUtils.IsStringConvertibleIFormattable(valueType))
             {
-                valueValue = Activator.CreateInstance(valueType, baseElement.Element(xnameValue).Value);
+                valueValue = Activator.CreateInstance(valueType, baseElement.Element(xNameValue)?.Value);
             }
             else if (ReflectionUtils.IsCollectionType(valueType))
             {
                 valueValue = DeserializeCollectionValue(valueType,
-                    baseElement.Element(xnameValue), xnameValue, null);
+                    baseElement.Element(xNameValue), xNameValue, null);
             }
             else
             {
-                var ser = NewInternalSerializer(valueType, xnameValue.Namespace.IfEmptyThenNone(), null);
-                valueValue = ser.DeserializeBase(baseElement.Element(xnameValue));
+                var ser = NewInternalSerializer(valueType, xNameValue.Namespace.IfEmptyThenNone(), null);
+                valueValue = ser.DeserializeBase(baseElement.Element(xNameValue));
                 FinalizeNewSerializer(ser, false);
             }
 
