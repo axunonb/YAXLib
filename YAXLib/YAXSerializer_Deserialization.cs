@@ -780,6 +780,8 @@ namespace YAXLib
             }
         }
 
+#nullable enable
+
         /// <summary>
         ///     Retrieves the collection value.
         /// </summary>
@@ -788,7 +790,7 @@ namespace YAXLib
         /// <param name="memberAlias">The member's alias, used only in exception titles.</param>
         /// <param name="collAttrInstance">The collection attribute instance.</param>
         /// <returns></returns>
-        private object DeserializeCollectionValue(Type collType, XElement xElement, XName memberAlias,
+        private object? DeserializeCollectionValue(Type collType, XElement xElement, XName memberAlias,
             YAXCollectionAttribute collAttrInstance)
         {
             _ = TryGetContainerObject(xElement, collType, memberAlias, out object? containerObj);
@@ -813,7 +815,7 @@ namespace YAXLib
 
             if (TryGetCollectionAsArray(xElement, collType, collItemType, memberAlias, dataItems, out var array)) return array;
 
-            if (TryGetCollectionAsDictionary(xElement, collType, collItemType, memberAlias, containerObj, dataItems, out var o)) return o;
+            if (TryGetCollectionAsDictionary(xElement, collType, collItemType, memberAlias, containerObj, dataItems, out var dictionary)) return dictionary;
 
             if (TryGetAsNonGenericDictionary(xElement, collType, memberAlias, containerObj, dataItems, out var nonGenericDictionary)) return nonGenericDictionary;
 
@@ -826,7 +828,6 @@ namespace YAXLib
             return null;
         }
 
-#nullable enable
         private bool TryGetAsEnumerable(XElement xElement, Type collType, XName memberAlias, object? containerObj,
             List<object> dataItems, out object? enumerable)
         {
