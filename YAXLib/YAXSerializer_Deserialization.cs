@@ -138,9 +138,7 @@ namespace YAXLib
         #endregion
 
         #region Private methods
-
-        
-
+       
         /// <summary>
         ///     The basic method which performs the whole job of de-serialization.
         /// </summary>
@@ -178,7 +176,9 @@ namespace YAXLib
         }
 
         /// <summary>
-        /// The default serialization algorithm
+        /// The default serialization algorithm, which deserializes
+        /// from value from attribute, from value and from XML element,
+        /// and from custom serializers.
         /// </summary>
         /// <param name="baseElement"></param>
         /// <returns>The deserialized object</returns>
@@ -783,297 +783,385 @@ namespace YAXLib
         /// <summary>
         ///     Retrieves the collection value.
         /// </summary>
-        /// <param name="colType">Type of the collection to be retrieved.</param>
-        /// <param name="xelemValue">The value of xml element.</param>
+        /// <param name="collType">Type of the collection to be retrieved.</param>
+        /// <param name="xElement">The xml element.</param>
         /// <param name="memberAlias">The member's alias, used only in exception titles.</param>
-        /// <param name="colAttrInstance">The collection attribute instance.</param>
+        /// <param name="collAttrInstance">The collection attribute instance.</param>
         /// <returns></returns>
-        private object DeserializeCollectionValue(Type colType, XElement xelemValue, XName memberAlias,
-            YAXCollectionAttribute colAttrInstance)
+        private object DeserializeCollectionValue(Type collType, XElement xElement, XName memberAlias,
+            YAXCollectionAttribute collAttrInstance)
         {
-            object containerObj = null;
-            if (ReflectionUtils.IsInstantiableCollection(colType))
+            _ = TryGetContainerObject(xElement, collType, memberAlias, out object? containerObj);
+
+            var dataItems = new List<object>(); // this will hold the actual data items
+            var collItemType = ReflectionUtils.GetCollectionItemType(collType);
+            var isPrimitive = ReflectionUtils.IsBasicType(collItemType);
+
+            if (isPrimitive && collAttrInstance is
+                    { SerializationType: YAXCollectionSerializationTypes.Serially })
             {
-                var namespaceToOverride = memberAlias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone();
-
-                var containerSer = NewInternalSerializer(colType, namespaceToOverride, null);
-
-                containerSer.IsCreatedToDeserializeANonCollectionMember = true;
-                containerSer.RemoveDeserializedXmlNodes = true;
-
-                containerObj = containerSer.DeserializeBase(xelemValue);
-                FinalizeNewSerializer(containerSer, false);
+                // The collection was serialized serially
+                GetSerialCollectionItems(xElement, memberAlias, collAttrInstance, collItemType, dataItems);
             }
-
-            var lst = new List<object>(); // this will hold the actual data items
-            var itemType = ReflectionUtils.GetCollectionItemType(colType);
-
-            if (ReflectionUtils.IsBasicType(itemType) && colAttrInstance != null &&
-                colAttrInstance.SerializationType == YAXCollectionSerializationTypes.Serially)
+            else 
             {
-                // What if the collection was serialized serially
-                var seps = colAttrInstance.SeparateBy.ToCharArray();
+                // The collection was serialized recursively
+                GetRecursiveCollectionItems(xElement, memberAlias, collAttrInstance, collItemType, isPrimitive, dataItems);
+            } 
 
-                // can white space characters be added to the separators?
-                if (colAttrInstance.IsWhiteSpaceSeparator) seps = seps.Union(new[] {' ', '\t', '\r', '\n'}).ToArray();
+            // Now dataItems list is filled and will be processed
 
-                var elemValue = xelemValue.Value;
-                var items = elemValue.Split(seps, StringSplitOptions.RemoveEmptyEntries);
+            if (TryGetCollectionAsArray(xElement, collType, collItemType, memberAlias, dataItems, out var array)) return array;
 
-                foreach (var wordItem in items)
-                    try
-                    {
-                        lst.Add(ReflectionUtils.ConvertBasicType(wordItem, itemType, Options.Culture));
-                    }
-                    catch
-                    {
-                        OnExceptionOccurred(new YAXBadlyFormedInput(memberAlias.ToString(), elemValue, xelemValue),
-                            Options.ExceptionBehavior);
-                    }
-            }
-            else //if the collection was serialized recursively
-            {
-                var isPrimitive = ReflectionUtils.IsBasicType(itemType);
+            if (TryGetCollectionAsDictionary(xElement, collType, collItemType, memberAlias, containerObj, dataItems, out var o)) return o;
 
-                XName eachElemName = null;
-                if (colAttrInstance != null && colAttrInstance.EachElementName != null)
-                {
-                    eachElemName = StringUtils.RefineSingleElement(colAttrInstance.EachElementName);
-                    eachElemName =
-                        eachElemName.OverrideNsIfEmpty(memberAlias.Namespace.IfEmptyThen(TypeNamespace)
-                            .IfEmptyThenNone());
-                }
+            if (TryGetAsNonGenericDictionary(xElement, collType, memberAlias, containerObj, dataItems, out var nonGenericDictionary)) return nonGenericDictionary;
 
-                var elemsToSearch = eachElemName == null ? xelemValue.Elements() : xelemValue.Elements(eachElemName);
+            if (TryGetAsBitArray(collType, dataItems, out var bitArray)) return bitArray;
 
-                foreach (var childElem in elemsToSearch)
-                {
-                    var curElementType = itemType;
-                    var curElementIsPrimitive = isPrimitive;
+            if (TryGetAsStack(xElement, collType, memberAlias, containerObj, dataItems, out var stack)) return stack;
 
-                    var realTypeAttribute = childElem.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.RealType,
-                        _documentDefaultNamespace);
-                    if (realTypeAttribute != null)
-                    {
-                        var theRealType = ReflectionUtils.GetTypeByName(realTypeAttribute.Value);
-                        if (theRealType != null)
-                        {
-                            curElementType = theRealType;
-                            curElementIsPrimitive = ReflectionUtils.IsBasicType(curElementType);
-                        }
-                    }
-
-                    // TODO: check if curElementType is derived or is the same is itemType, for speed concerns perform this check only when elementName is null
-                    if (eachElemName == null && (curElementType == typeof(object) ||
-                                                 !ReflectionUtils.IsTypeEqualOrInheritedFromType(curElementType,
-                                                     itemType)))
-                        continue;
-
-                    if (curElementIsPrimitive)
-                    {
-                        try
-                        {
-                            lst.Add(ReflectionUtils.ConvertBasicType(childElem.Value, curElementType, Options.Culture));
-                        }
-                        catch
-                        {
-                            OnExceptionOccurred(
-                                new YAXBadlyFormedInput(childElem.Name.ToString(), childElem.Value, childElem),
-                                Options.ExceptionBehavior);
-                        }
-                    }
-                    else
-                    {
-                        var namespaceToOverride = memberAlias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone();
-                        var ser = NewInternalSerializer(curElementType, namespaceToOverride, null);
-                        lst.Add(ser.DeserializeBase(childElem));
-                        FinalizeNewSerializer(ser, false);
-                    }
-                }
-            } // end of else if 
-
-            // Now what should I do with the filled list: lst
-            Type dicKeyType, dicValueType;
-            if (ReflectionUtils.IsArray(colType))
-            {
-                var dimsAttr = xelemValue.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.Dimensions,
-                    _documentDefaultNamespace);
-                var dims = Array.Empty<int>();
-                if (dimsAttr != null) dims = StringUtils.ParseArrayDimsString(dimsAttr.Value);
-
-                Array arrayInstance = null;
-                if (dims.Length > 0)
-                {
-                    var lowerBounds = new int[dims.Length]; // an array of zeros
-                    arrayInstance = Array.CreateInstance(itemType, dims, lowerBounds); // create the array
-
-                    var count = Math.Min(arrayInstance.Length, lst.Count);
-                    // now fill the array
-                    for (var i = 0; i < count; i++)
-                    {
-                        var inds = GetArrayDimensionalIndex(i, dims);
-                        try
-                        {
-                            arrayInstance.SetValue(lst[i], inds);
-                        }
-                        catch
-                        {
-                            OnExceptionOccurred(
-                                new YAXCannotAddObjectToCollection(memberAlias.ToString(), lst[i], xelemValue),
-                                Options.ExceptionBehavior);
-                        }
-                    }
-                }
-                else
-                {
-                    arrayInstance = Array.CreateInstance(itemType, lst.Count); // create the array
-
-                    var count = Math.Min(arrayInstance.Length, lst.Count);
-                    // now fill the array
-                    for (var i = 0; i < count; i++)
-                        try
-                        {
-                            arrayInstance.SetValue(lst[i], i);
-                        }
-                        catch
-                        {
-                            OnExceptionOccurred(
-                                new YAXCannotAddObjectToCollection(memberAlias.ToString(), lst[i], xelemValue),
-                                Options.ExceptionBehavior);
-                        }
-                }
-
-                return arrayInstance;
-            }
-
-            if (ReflectionUtils.IsIDictionary(colType, out dicKeyType, out dicValueType))
-            {
-                //The collection is a Dictionary
-                var dic = containerObj;
-
-                foreach (var lstItem in lst)
-                {
-                    var key = itemType.GetProperty("Key").GetValue(lstItem, null);
-                    var value = itemType.GetProperty("Value").GetValue(lstItem, null);
-                    try
-                    {
-                        colType.InvokeMethod("Add", dic, new[] {key, value});
-                        //colType.InvokeMember("Add", BindingFlags.InvokeMethod, null, dic, new[] { key, value });
-                    }
-                    catch
-                    {
-                        OnExceptionOccurred(
-                            new YAXCannotAddObjectToCollection(memberAlias.ToString(), lstItem, xelemValue),
-                            Options.ExceptionBehavior);
-                    }
-                }
-
-                return dic;
-            }
-
-            if (ReflectionUtils.IsNonGenericIDictionary(colType))
-            {
-                var col = containerObj;
-                foreach (var lstItem in lst)
-                {
-                    var key = lstItem.GetType().GetProperty("Key", BindingFlags.Instance | BindingFlags.Public)
-                        .GetValue(lstItem, null);
-                    var value = lstItem.GetType().GetProperty("Value", BindingFlags.Instance | BindingFlags.Public)
-                        .GetValue(lstItem, null);
-
-                    try
-                    {
-                        colType.InvokeMethod("Add", col, new[] {key, value});
-                        //colType.InvokeMember("Add", BindingFlags.InvokeMethod, null, col, new[] { key, value });
-                    }
-                    catch
-                    {
-                        OnExceptionOccurred(
-                            new YAXCannotAddObjectToCollection(memberAlias.ToString(), lstItem, xelemValue),
-                            Options.ExceptionBehavior);
-                    }
-                }
-
-                return col;
-            }
-
-            if (ReflectionUtils.IsTypeEqualOrInheritedFromType(colType, typeof(BitArray)))
-            {
-                var bArray = new bool[lst.Count];
-                for (var i = 0; i < bArray.Length; i++)
-                    try
-                    {
-                        bArray[i] = (bool) lst[i];
-                    }
-                    catch
-                    {
-                    }
-
-                var col = Activator.CreateInstance(colType, bArray);
-                //object col = colType.InvokeMember(string.Empty, BindingFlags.CreateInstance, null, null, new object[] { bArray });
-
-                return col;
-            }
-
-            if (ReflectionUtils.IsTypeEqualOrInheritedFromType(colType, typeof(Stack)) ||
-                ReflectionUtils.IsTypeEqualOrInheritedFromType(colType, typeof(Stack<>)))
-            {
-                //object col = colType.InvokeMember(string.Empty, System.Reflection.BindingFlags.CreateInstance, null, null, new object[0]);
-                var col = containerObj;
-
-                const string additionMethodName = "Push";
-
-                for (var i = lst.Count - 1; i >= 0; i--) // the loop must be from end to front
-                    try
-                    {
-                        colType.InvokeMethod(additionMethodName, col, new[] {lst[i]});
-                        //colType.InvokeMember(additionMethodName, BindingFlags.InvokeMethod, null, col, new[] { lst[i] });
-                    }
-                    catch
-                    {
-                        OnExceptionOccurred(
-                            new YAXCannotAddObjectToCollection(memberAlias.ToString(), lst[i], xelemValue),
-                            Options.ExceptionBehavior);
-                    }
-
-                return col;
-            }
-
-            if (ReflectionUtils.IsIEnumerable(colType))
-            {
-                if (containerObj == null)
-                    return lst;
-
-                var col = containerObj;
-
-                var additionMethodName = "Add";
-
-                if (ReflectionUtils.IsTypeEqualOrInheritedFromType(colType, typeof(Queue)) ||
-                    ReflectionUtils.IsTypeEqualOrInheritedFromType(colType, typeof(Queue<>)))
-                    additionMethodName = "Enqueue";
-                else if (ReflectionUtils.IsTypeEqualOrInheritedFromType(colType, typeof(LinkedList<>)))
-                    additionMethodName = "AddLast";
-
-                foreach (var lstItem in lst)
-                    try
-                    {
-                        colType.InvokeMethod(additionMethodName, col, new[] {lstItem});
-                    }
-                    catch
-                    {
-                        OnExceptionOccurred(
-                            new YAXCannotAddObjectToCollection(memberAlias.ToString(), lstItem, xelemValue),
-                            Options.ExceptionBehavior);
-                    }
-
-                return col;
-            }
+            if (TryGetAsEnumerable(xElement, collType, memberAlias, containerObj, dataItems, out var enumerable)) return enumerable;
 
             return null;
         }
 
+#nullable enable
+        private bool TryGetAsEnumerable(XElement xElement, Type collType, XName memberAlias, object containerObj,
+            List<object> dataItems, out object? enumerable)
+        {
+            enumerable = null;
+
+            if (!ReflectionUtils.IsIEnumerable(collType)) return false;
+
+            if (containerObj == null)
+            {
+                enumerable = dataItems;
+                return true;
+            }
+
+            enumerable = containerObj;
+
+            var additionMethodName = "Add";
+
+            if (ReflectionUtils.IsTypeEqualOrInheritedFromType(collType, typeof(Queue)) ||
+                ReflectionUtils.IsTypeEqualOrInheritedFromType(collType, typeof(Queue<>)))
+                additionMethodName = "Enqueue";
+            else if (ReflectionUtils.IsTypeEqualOrInheritedFromType(collType, typeof(LinkedList<>)))
+                additionMethodName = "AddLast";
+
+            foreach (var dataItem in dataItems)
+                try
+                {
+                    collType.InvokeMethod(additionMethodName, enumerable, new[] { dataItem });
+                }
+                catch
+                {
+                    OnExceptionOccurred(
+                        new YAXCannotAddObjectToCollection(memberAlias.ToString(), dataItem, xElement),
+                        Options.ExceptionBehavior);
+                }
+
+            return true;
+        }
+
+        private bool TryGetAsStack(XElement xElement, Type collType, XName memberAlias, object containerObj, List<object> dataItems,
+            out object? stack)
+        {
+            stack = null;
+
+            if (!ReflectionUtils.IsTypeEqualOrInheritedFromType(collType, typeof(Stack)) &&
+                !ReflectionUtils.IsTypeEqualOrInheritedFromType(collType, typeof(Stack<>))) return false;
+
+            var st = containerObj;
+
+            const string additionMethodName = "Push";
+
+            for (var i = dataItems.Count - 1; i >= 0; i--) // the loop must be from end to beginning
+                try
+                {
+                    collType.InvokeMethod(additionMethodName, st, new[] { dataItems[i] });
+                }
+                catch
+                {
+                    OnExceptionOccurred(
+                        new YAXCannotAddObjectToCollection(memberAlias.ToString(), dataItems[i], xElement),
+                        Options.ExceptionBehavior);
+                }
+
+            stack = st;
+            return true;
+        }
+
+        private static bool TryGetAsBitArray(Type collType, List<object> dataItems, out object? bitArray)
+        {
+            bitArray = null;
+
+            if (!ReflectionUtils.IsTypeEqualOrInheritedFromType(collType, typeof(BitArray))) return false;
+
+            var ba = new bool[dataItems.Count];
+            for (var i = 0; i < ba.Length; i++)
+                try
+                {
+                    ba[i] = (bool)dataItems[i];
+                }
+                catch
+                {
+                    // Nothing to do, if cast fails
+                }
+
+            bitArray = Activator.CreateInstance(collType, ba);
+
+            return true;
+        }
+
+        private bool TryGetAsNonGenericDictionary(XElement xElement, Type collType, XName memberAlias, object containerObj,
+            List<object> dataItems, out object? nonGenericDictionary)
+        {
+            nonGenericDictionary = containerObj;
+
+            if (!ReflectionUtils.IsNonGenericIDictionary(collType)) return false;
+
+            foreach (var lstItem in dataItems)
+            {
+                var key = lstItem.GetType().GetProperty("Key", BindingFlags.Instance | BindingFlags.Public)
+                    .GetValue(lstItem, null);
+                var value = lstItem.GetType().GetProperty("Value", BindingFlags.Instance | BindingFlags.Public)
+                    .GetValue(lstItem, null);
+
+                try
+                {
+                    collType.InvokeMethod("Add", nonGenericDictionary, new[] { key, value });
+                }
+                catch
+                {
+                    OnExceptionOccurred(
+                        new YAXCannotAddObjectToCollection(memberAlias.ToString(), lstItem, xElement),
+                        Options.ExceptionBehavior);
+                }
+            }
+
+            return true;
+        }
+
+        private bool TryGetCollectionAsDictionary(XElement xElement, Type collType, Type collItemType, XName memberAlias,
+            object containerObj, List<object> dataItems, out object? dictionary)
+        {
+            dictionary = null;
+
+            if (!ReflectionUtils.IsIDictionary(collType, out _, out _)) return false;
+
+            // The collection is a Dictionary
+            var dict = containerObj;
+
+            foreach (var dataItem in dataItems)
+            {
+                var key = collItemType.GetProperty("Key").GetValue(dataItem, null);
+                var value = collItemType.GetProperty("Value").GetValue(dataItem, null);
+                try
+                {
+                    collType.InvokeMethod("Add", dict, new[] { key, value });
+                    //colType.InvokeMember("Add", BindingFlags.InvokeMethod, null, dic, new[] { key, value });
+                }
+                catch
+                {
+                    OnExceptionOccurred(
+                        new YAXCannotAddObjectToCollection(memberAlias.ToString(), dataItem, xElement),
+                        Options.ExceptionBehavior);
+                }
+            }
+
+            dictionary = dict;
+            return true;
+        }
+
+        private bool TryGetCollectionAsArray(XElement xElement, Type collType, Type collItemType, XName memberAlias,
+            List<object> dataItems, out object? array)
+        {
+            array = null;
+
+            if (!ReflectionUtils.IsArray(collType)) return false;
+
+            var dimsAttr = xElement.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.Dimensions,
+                _documentDefaultNamespace);
+            var dims = Array.Empty<int>();
+            if (dimsAttr != null) dims = StringUtils.ParseArrayDimsString(dimsAttr.Value);
+
+            Array arrayInstance;
+            if (dims.Length > 0)
+            {
+                var lowerBounds = new int[dims.Length]; // an array of zeros
+                arrayInstance = Array.CreateInstance(collItemType, dims, lowerBounds); // create the array
+
+                var count = Math.Min(arrayInstance.Length, dataItems.Count);
+                // now fill the array
+                for (var i = 0; i < count; i++)
+                {
+                    var dimIndex = GetArrayDimensionalIndex(i, dims);
+                    try
+                    {
+                        arrayInstance.SetValue(dataItems[i], dimIndex);
+                    }
+                    catch
+                    {
+                        OnExceptionOccurred(
+                            new YAXCannotAddObjectToCollection(memberAlias.ToString(), dataItems[i], xElement),
+                            Options.ExceptionBehavior);
+                    }
+                }
+            }
+            else
+            {
+                arrayInstance = Array.CreateInstance(collItemType, dataItems.Count); // create the array
+
+                var count = Math.Min(arrayInstance.Length, dataItems.Count);
+                // now fill the array
+                for (var i = 0; i < count; i++)
+                    try
+                    {
+                        arrayInstance.SetValue(dataItems[i], i);
+                    }
+                    catch
+                    {
+                        OnExceptionOccurred(
+                            new YAXCannotAddObjectToCollection(memberAlias.ToString(), dataItems[i], xElement),
+                            Options.ExceptionBehavior);
+                    }
+            }
+
+            array = arrayInstance;
+            return true;
+        }
+
+#nullable disable
+
         /// <summary>
-        ///     De-serializes the collection member.
+        /// Gets the data items for a collection that was serialized recursively.
+        /// </summary>
+        /// <param name="xElement"></param>
+        /// <param name="memberAlias"></param>
+        /// <param name="collAttrInstance"></param>
+        /// <param name="collItemType"></param>
+        /// <param name="isPrimitive"></param>
+        /// <param name="dataItems">The list that will be filled.</param>
+        private void GetRecursiveCollectionItems(XElement xElement, XName memberAlias, YAXCollectionAttribute collAttrInstance,
+            Type collItemType, bool isPrimitive, List<object> dataItems)
+        {
+            XName eachElemName = null;
+            if (collAttrInstance is { EachElementName: { } })
+            {
+                eachElemName = StringUtils.RefineSingleElement(collAttrInstance.EachElementName);
+                eachElemName =
+                    eachElemName.OverrideNsIfEmpty(memberAlias.Namespace.IfEmptyThen(TypeNamespace)
+                        .IfEmptyThenNone());
+            }
+
+            var elemsToSearch = eachElemName == null ? xElement.Elements() : xElement.Elements(eachElemName);
+
+            foreach (var childElem in elemsToSearch)
+            {
+                var curElementType = collItemType;
+                var curElementIsPrimitive = isPrimitive;
+
+                var realTypeAttribute = childElem.Attribute_NamespaceSafe(
+                    Options.Namespace.Uri + Options.AttributeName.RealType,
+                    _documentDefaultNamespace);
+                if (realTypeAttribute != null)
+                {
+                    var theRealType = ReflectionUtils.GetTypeByName(realTypeAttribute.Value);
+                    if (theRealType != null)
+                    {
+                        curElementType = theRealType;
+                        curElementIsPrimitive = ReflectionUtils.IsBasicType(curElementType);
+                    }
+                }
+
+                // Check if curElementType is derived or is the same is itemType.
+                // For speed concerns we perform this check only when eachElemName is null
+                if (eachElemName == null && (curElementType == typeof(object) ||
+                                             !ReflectionUtils.IsTypeEqualOrInheritedFromType(curElementType,
+                                                 collItemType)))
+                    continue;
+
+                if (curElementIsPrimitive)
+                {
+                    try
+                    {
+                        dataItems.Add(ReflectionUtils.ConvertBasicType(childElem.Value, curElementType, Options.Culture));
+                    }
+                    catch
+                    {
+                        OnExceptionOccurred(
+                            new YAXBadlyFormedInput(childElem.Name.ToString(), childElem.Value, childElem),
+                            Options.ExceptionBehavior);
+                    }
+                }
+                else
+                {
+                    var namespaceToOverride = memberAlias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone();
+                    var ser = NewInternalSerializer(curElementType, namespaceToOverride, null);
+                    dataItems.Add(ser.DeserializeBase(childElem));
+                    FinalizeNewSerializer(ser, false);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets the data items for a collection that was serialized serially.
+        /// </summary>
+        /// <param name="xElement"></param>
+        /// <param name="memberAlias"></param>
+        /// <param name="collAttrInstance"></param>
+        /// <param name="collItemType"></param>
+        /// <param name="dataItems">The list that will be filled.</param>
+        private void GetSerialCollectionItems(XElement xElement, XName memberAlias,
+            YAXCollectionAttribute collAttrInstance,
+            Type collItemType,
+            List<object> dataItems)
+        {
+            var separators = collAttrInstance.SeparateBy.ToCharArray();
+
+            // Should we add white space characters to the separators?
+            if (collAttrInstance.IsWhiteSpaceSeparator)
+                separators = separators.Union(new[] { ' ', '\t', '\r', '\n' }).ToArray();
+
+            var elemValue = xElement.Value;
+            var items = elemValue.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var wordItem in items)
+                try
+                {
+                    dataItems.Add(ReflectionUtils.ConvertBasicType(wordItem, collItemType, Options.Culture));
+                }
+                catch
+                {
+                    OnExceptionOccurred(new YAXBadlyFormedInput(memberAlias.ToString(), elemValue, xElement),
+                        Options.ExceptionBehavior);
+                }
+        }
+
+#nullable enable
+        private bool TryGetContainerObject(XElement xElement, Type colType, XName memberAlias, out object? containerObj)
+        {
+            containerObj = null;
+
+            // The collection type has an empty constructor
+            if (!ReflectionUtils.IsInstantiableCollection(colType)) return false;
+
+            var namespaceToOverride = memberAlias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone();
+            var containerSer = NewInternalSerializer(colType, namespaceToOverride, null);
+            containerSer.IsCreatedToDeserializeANonCollectionMember = true;
+            containerSer.RemoveDeserializedXmlNodes = true;
+
+            containerObj = containerSer.DeserializeBase(xElement);
+            FinalizeNewSerializer(containerSer, false);
+            
+            return true;
+        }
+#nullable disable
+
+        /// <summary>
+        ///     Deserializes the collection member.
         /// </summary>
         /// <param name="o">The object to store the retrieved value at.</param>
         /// <param name="member">The member of the specified object whose value we intent to retreive.</param>
@@ -1117,19 +1205,19 @@ namespace YAXLib
         ///     Gets the dimensional index for an element of a multi-dimensional array from a
         ///     linear index specified.
         /// </summary>
-        /// <param name="linInd">The linear index.</param>
-        /// <param name="dims">The dimensions of the array.</param>
+        /// <param name="linearIndex">The linear index.</param>
+        /// <param name="dimensions">The dimensions of the array.</param>
         /// <returns></returns>
-        private static int[] GetArrayDimensionalIndex(long linInd, int[] dims)
+        private static int[] GetArrayDimensionalIndex(long linearIndex, int[] dimensions)
         {
-            var result = new int[dims.Length];
+            var result = new int[dimensions.Length];
 
-            var d = (int) linInd;
+            var d = (int) linearIndex;
 
-            for (var n = dims.Length - 1; n > 0; n--)
+            for (var n = dimensions.Length - 1; n > 0; n--)
             {
-                result[n] = d % dims[n];
-                d = (d - result[n]) / dims[n];
+                result[n] = d % dimensions[n];
+                d = (d - result[n]) / dimensions[n];
             }
 
             result[0] = d;
@@ -1283,7 +1371,7 @@ namespace YAXLib
             return dic;
         }
 
-                /// <summary>
+        /// <summary>
         ///     De-serializes a dictionary member which also benefits from a <see cref="YAXDictionaryAttribute"/>.
         /// </summary>
         /// <param name="o">The object to hold the deserialized value.</param>
