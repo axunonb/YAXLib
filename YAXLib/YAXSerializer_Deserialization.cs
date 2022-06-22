@@ -827,7 +827,7 @@ namespace YAXLib
         }
 
 #nullable enable
-        private bool TryGetAsEnumerable(XElement xElement, Type collType, XName memberAlias, object containerObj,
+        private bool TryGetAsEnumerable(XElement xElement, Type collType, XName memberAlias, object? containerObj,
             List<object> dataItems, out object? enumerable)
         {
             enumerable = null;
@@ -865,7 +865,7 @@ namespace YAXLib
             return true;
         }
 
-        private bool TryGetAsStack(XElement xElement, Type collType, XName memberAlias, object containerObj, List<object> dataItems,
+        private bool TryGetAsStack(XElement xElement, Type collType, XName memberAlias, object? containerObj, List<object> dataItems,
             out object? stack)
         {
             stack = null;
@@ -915,7 +915,7 @@ namespace YAXLib
             return true;
         }
 
-        private bool TryGetAsNonGenericDictionary(XElement xElement, Type collType, XName memberAlias, object containerObj,
+        private bool TryGetAsNonGenericDictionary(XElement xElement, Type collType, XName memberAlias, object? containerObj,
             List<object> dataItems, out object? nonGenericDictionary)
         {
             nonGenericDictionary = containerObj;
@@ -945,7 +945,7 @@ namespace YAXLib
         }
 
         private bool TryGetCollectionAsDictionary(XElement xElement, Type collType, Type collItemType, XName memberAlias,
-            object containerObj, List<object> dataItems, out object? dictionary)
+            object? containerObj, List<object> dataItems, out object? dictionary)
         {
             dictionary = null;
 
