@@ -793,7 +793,8 @@ namespace YAXLib
         private object? DeserializeCollectionValue(Type collType, XElement xElement, XName memberAlias,
             YAXCollectionAttribute collAttrInstance)
         {
-            _ = TryGetContainerObject(xElement, collType, memberAlias, out object? containerObj);
+            // Get the container object from the element (may be null)
+            _ = TryGetContainerObject(xElement, collType, memberAlias, out var containerObj);
 
             var dataItems = new List<object>(); // this will hold the actual data items
             var collItemType = ReflectionUtils.GetCollectionItemType(collType);
@@ -807,7 +808,7 @@ namespace YAXLib
             }
             else 
             {
-                // The collection was serialized recursively
+                // The collection was serialized recursively or has no containing element
                 GetRecursiveCollectionItems(xElement, memberAlias, collAttrInstance, collItemType, isPrimitive, dataItems);
             } 
 
@@ -817,18 +818,18 @@ namespace YAXLib
 
             if (TryGetCollectionAsDictionary(xElement, collType, collItemType, memberAlias, containerObj, dataItems, out var dictionary)) return dictionary;
 
-            if (TryGetAsNonGenericDictionary(xElement, collType, memberAlias, containerObj, dataItems, out var nonGenericDictionary)) return nonGenericDictionary;
+            if (TryGetCollectionAsNonGenericDictionary(xElement, collType, memberAlias, containerObj, dataItems, out var nonGenericDictionary)) return nonGenericDictionary;
 
-            if (TryGetAsBitArray(collType, dataItems, out var bitArray)) return bitArray;
+            if (TryGetCollectionAsBitArray(collType, dataItems, out var bitArray)) return bitArray;
 
-            if (TryGetAsStack(xElement, collType, memberAlias, containerObj, dataItems, out var stack)) return stack;
+            if (TryGetCollectionAsStack(xElement, collType, memberAlias, containerObj, dataItems, out var stack)) return stack;
 
-            if (TryGetAsEnumerable(xElement, collType, memberAlias, containerObj, dataItems, out var enumerable)) return enumerable;
+            if (TryGetCollectionAsEnumerable(xElement, collType, memberAlias, containerObj, dataItems, out var enumerable)) return enumerable;
 
             return null;
         }
 
-        private bool TryGetAsEnumerable(XElement xElement, Type collType, XName memberAlias, object? containerObj,
+        private bool TryGetCollectionAsEnumerable(XElement xElement, Type collType, XName memberAlias, object? containerObj,
             List<object> dataItems, out object? enumerable)
         {
             enumerable = null;
@@ -866,7 +867,7 @@ namespace YAXLib
             return true;
         }
 
-        private bool TryGetAsStack(XElement xElement, Type collType, XName memberAlias, object? containerObj, List<object> dataItems,
+        private bool TryGetCollectionAsStack(XElement xElement, Type collType, XName memberAlias, object? containerObj, List<object> dataItems,
             out object? stack)
         {
             stack = null;
@@ -894,7 +895,7 @@ namespace YAXLib
             return true;
         }
 
-        private static bool TryGetAsBitArray(Type collType, List<object> dataItems, out object? bitArray)
+        private static bool TryGetCollectionAsBitArray(Type collType, List<object> dataItems, out object? bitArray)
         {
             bitArray = null;
 
@@ -916,7 +917,7 @@ namespace YAXLib
             return true;
         }
 
-        private bool TryGetAsNonGenericDictionary(XElement xElement, Type collType, XName memberAlias, object? containerObj,
+        private bool TryGetCollectionAsNonGenericDictionary(XElement xElement, Type collType, XName memberAlias, object? containerObj,
             List<object> dataItems, out object? nonGenericDictionary)
         {
             nonGenericDictionary = containerObj;
@@ -1037,7 +1038,8 @@ namespace YAXLib
 #nullable disable
 
         /// <summary>
-        /// Gets the data items for a collection that was serialized recursively.
+        /// Gets the data items for a collection that was serialized recursively,
+        /// or that has no containing element
         /// </summary>
         /// <param name="xElement"></param>
         /// <param name="memberAlias"></param>
