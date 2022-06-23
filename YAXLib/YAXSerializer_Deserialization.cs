@@ -1302,9 +1302,8 @@ namespace YAXLib
                     eachElementName.OverrideNsIfEmpty(alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone());
             }
 
-            GetDictionaryAttributeDetails(dictAttrInstance, keyType, valueType, alias, ref eachElementName,
-                out var isKeyAttribute, out var isKeyContent, out var isValueAttribute, out var isValueContent,
-                ref keyAlias, ref valueAlias);
+            GetDictionaryAttributeDetails(dictAttrInstance, keyType, valueType, alias, ref eachElementName, ref keyAlias, ref valueAlias);
+            GetDictionaryAttributeFlags(dictAttrInstance, keyType, valueType, out var isKeyAttribute, out var isKeyContent, out var isValueAttribute, out var isValueContent);
 
             foreach (var childElem in xElementValue.Elements(eachElementName))
             {
@@ -1403,9 +1402,9 @@ namespace YAXLib
 
 
 #nullable disable
-        private void GetDictionaryAttributeDetails(YAXDictionaryAttribute dictAttrInstance, Type keyType, Type valueType,
-            XName alias, ref XName eachElementName, out bool isKeyAttribute, out bool isKeyContent, out bool isValueAttribute,
-            out bool isValueContent, ref XName keyAlias, ref XName valueAlias)
+        private void GetDictionaryAttributeFlags(YAXDictionaryAttribute dictAttrInstance, Type keyType, Type valueType,
+           out bool isKeyAttribute, out bool isKeyContent, out bool isValueAttribute,
+            out bool isValueContent)
         {
             // Set defaults
             isKeyAttribute = false;
@@ -1414,13 +1413,6 @@ namespace YAXLib
             isValueContent = false;
 
             if (dictAttrInstance == null) return;
-
-            if (dictAttrInstance.EachPairName != null)
-            {
-                eachElementName = StringUtils.RefineSingleElement(dictAttrInstance.EachPairName);
-                eachElementName =
-                    eachElementName.OverrideNsIfEmpty(alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone());
-            }
 
             if (dictAttrInstance.SerializeKeyAs == YAXNodeTypes.Attribute)
                 isKeyAttribute = ReflectionUtils.IsBasicType(keyType);
@@ -1431,6 +1423,19 @@ namespace YAXLib
                 isValueAttribute = ReflectionUtils.IsBasicType(valueType);
             else if (dictAttrInstance.SerializeValueAs == YAXNodeTypes.Content)
                 isValueContent = ReflectionUtils.IsBasicType(valueType);
+        }
+
+        private void GetDictionaryAttributeDetails(YAXDictionaryAttribute dictAttrInstance, Type keyType, Type valueType,
+            XName alias, ref XName eachElementName, ref XName keyAlias, ref XName valueAlias)
+        {
+            if (dictAttrInstance == null) return;
+
+            if (dictAttrInstance.EachPairName != null)
+            {
+                eachElementName = StringUtils.RefineSingleElement(dictAttrInstance.EachPairName);
+                eachElementName =
+                    eachElementName.OverrideNsIfEmpty(alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone());
+            }
 
             if (dictAttrInstance.KeyName != null)
             {
@@ -1447,7 +1452,7 @@ namespace YAXLib
         }
 
         /// <summary>
-        ///     De-serializes a dictionary member which also benefits from a <see cref="YAXDictionaryAttribute"/>.
+        ///     Deserializes a dictionary member which also benefits from a <see cref="YAXDictionaryAttribute"/>.
         /// </summary>
         /// <param name="o">The object to hold the deserialized value.</param>
         /// <param name="member">The member corresponding to the dictionary member.</param>
