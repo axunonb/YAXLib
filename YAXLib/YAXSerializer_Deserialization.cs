@@ -1302,7 +1302,7 @@ namespace YAXLib
                     eachElementName.OverrideNsIfEmpty(alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone());
             }
 
-            GetDictionaryAttributeDetails(dictAttrInstance, keyType, valueType, alias, ref eachElementName, ref keyAlias, ref valueAlias);
+            GetDictionaryAttributeDetails(dictAttrInstance, alias, ref eachElementName, ref keyAlias, ref valueAlias);
             GetDictionaryAttributeFlags(dictAttrInstance, keyType, valueType, out var isKeyAttribute, out var isKeyContent, out var isValueAttribute, out var isValueContent);
 
             foreach (var childElem in xElementValue.Elements(eachElementName))
@@ -1402,7 +1402,7 @@ namespace YAXLib
 
 
 #nullable disable
-        private void GetDictionaryAttributeFlags(YAXDictionaryAttribute dictAttrInstance, Type keyType, Type valueType,
+        private static void GetDictionaryAttributeFlags(YAXDictionaryAttribute dictAttrInstance, Type keyType, Type valueType,
            out bool isKeyAttribute, out bool isKeyContent, out bool isValueAttribute,
             out bool isValueContent)
         {
@@ -1425,8 +1425,8 @@ namespace YAXLib
                 isValueContent = ReflectionUtils.IsBasicType(valueType);
         }
 
-        private void GetDictionaryAttributeDetails(YAXDictionaryAttribute dictAttrInstance, Type keyType, Type valueType,
-            XName alias, ref XName eachElementName, ref XName keyAlias, ref XName valueAlias)
+        private void GetDictionaryAttributeDetails(YAXDictionaryAttribute dictAttrInstance, XName alias,
+            ref XName eachElementName, ref XName keyAlias, ref XName valueAlias)
         {
             if (dictAttrInstance == null) return;
 
