@@ -645,139 +645,187 @@ namespace YAXLib
         /// <summary>
         ///     Retrieves the value of the element from the specified XML element or attribute.
         /// </summary>
-        /// <param name="o">The object to store the retrieved value at.</param>
+        /// <param name="obj">The object to store the retrieved value at.</param>
         /// <param name="member">The member of the specified object whose value we intent to retrieve.</param>
         /// <param name="elemValue">The value of the element stored as string.</param>
-        /// <param name="xelemValue">
+        /// <param name="xElementValue">
         ///     The XML element value to be retrieved. If the value to be retrieved
         ///     has been stored in an XML attribute, this reference is <c>null</c>.
         /// </param>
-        private void RetrieveElementValue(object o, MemberWrapper member, string elemValue, XElement xelemValue)
+        private void RetrieveElementValue(object obj, MemberWrapper member, string elemValue, XElement xElementValue)
         {
             var memberType = member.MemberType;
 
             // when serializing collection with no containing element, then the real type attribute applies to the class
             // containing the collection, not the collection itself. That's because the containing element of collection is not 
             // serialized. In this case the flag `isRealTypeAttributeNotRelevant` is set to true.
-            var isRealTypeAttributeNotRelevant = member.CollectionAttributeInstance != null
-                                                 && member.CollectionAttributeInstance.SerializationType ==
-                                                 YAXCollectionSerializationTypes.RecursiveWithNoContainingElement;
+            var isRealTypeAttributeNotRelevant = member.CollectionAttributeInstance is
+                { SerializationType: YAXCollectionSerializationTypes.RecursiveWithNoContainingElement };
 
-            // try to retrieve the real-type if specified
-            if (xelemValue != null && !isRealTypeAttributeNotRelevant)
+            GetRealTypeIfSpecified(xElementValue, isRealTypeAttributeNotRelevant, ref memberType);
+
+            if (TrySetValueForEmptyElement(obj, member, memberType, xElementValue)) return;
+            
+            if (TrySetValueForString(obj, elemValue, xElementValue, member, memberType)) return;
+
+            if (TrySetValueForBasicType(obj, elemValue, xElementValue, member, memberType)) return;
+            
+            if (member.IsTreatedAsDictionary && member.DictionaryAttributeInstance != null)
             {
-                var realTypeAttribute = xelemValue.Attribute_NamespaceSafe(Options.Namespace.Uri + Options.AttributeName.RealType,
-                    _documentDefaultNamespace);
-                if (realTypeAttribute != null)
-                {
-                    var realType = ReflectionUtils.GetTypeByName(realTypeAttribute.Value);
-                    if (realType != null) memberType = realType;
-                }
+                DeserializeTaggedDictionaryMember(obj, member, xElementValue);
+                return;
+            }
+            
+            if (member.IsTreatedAsCollection)
+            {
+                DeserializeCollectionMember(obj, member, memberType, elemValue, xElementValue);
+                return;
             }
 
-            if (xelemValue != null && XMLUtils.IsElementCompletelyEmpty(xelemValue) &&
-                !ReflectionUtils.IsBasicType(memberType) && !member.IsTreatedAsCollection &&
-                !member.IsTreatedAsDictionary &&
-                !AtLeastOneOfMembersExists(xelemValue, memberType))
+            // use the default method for retrieving element values
+            _ = TrySetValueDefault(obj, member, memberType, xElementValue);
+        }
+
+        /// <summary>
+        /// The default method for retrieving element values.
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="member"></param>
+        /// <param name="memberType"></param>
+        /// <param name="xElementValue"></param>
+        private bool TrySetValueDefault(object obj, MemberWrapper member, Type memberType, XElement xElementValue)
+        {
+            var namespaceToOverride = member.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone();
+            var serializer = NewInternalSerializer(memberType, namespaceToOverride, null);
+
+            serializer.IsCreatedToDeserializeANonCollectionMember =
+                !(member.IsTreatedAsDictionary || member.IsTreatedAsCollection);
+
+            if (_desObject != null) // i.e. it is in resuming mode
+                serializer.SetDeserializationBaseObject(member.GetValue(obj));
+
+            var convertedObj = serializer.DeserializeBase(xElementValue);
+            FinalizeNewSerializer(serializer, false);
+
+            try
             {
+                member.SetValue(obj, convertedObj);
+                return true;
+            }
+            catch
+            {
+                OnExceptionOccurred(new YAXPropertyCannotBeAssignedTo(member.Alias.LocalName, xElementValue),
+                    Options.ExceptionBehavior);
+            }
+
+            return false;
+        }
+
+        private bool TrySetValueForBasicType(object obj, string elemValue, XElement xElementValue,
+            MemberWrapper member,
+            Type memberType)
+        {
+            if (!ReflectionUtils.IsBasicType(memberType)) return false;
+
+            try
+            {
+                object convertedObj;
+                if (ReflectionUtils.IsNullable(memberType) && string.IsNullOrEmpty(elemValue))
+                    convertedObj = member.DefaultValue;
+                else
+                    convertedObj = ReflectionUtils.ConvertBasicType(elemValue, memberType, Options.Culture);
+
                 try
                 {
-                    member.SetValue(o, member.DefaultValue);
+                    member.SetValue(obj, convertedObj);
+                    return true;
+                }
+                catch
+                {
+                    OnExceptionOccurred(new YAXPropertyCannotBeAssignedTo(member.Alias.LocalName, xElementValue),
+                        Options.ExceptionBehavior);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (ex is YAXException) throw;
+
+                OnExceptionOccurred(new YAXBadlyFormedInput(member.Alias.LocalName, elemValue, xElementValue),
+                    member.TreatErrorsAs);
+
+                try
+                {
+                    member.SetValue(obj, member.DefaultValue);
+                    return true;
                 }
                 catch
                 {
                     OnExceptionOccurred(
-                        new YAXDefaultValueCannotBeAssigned(member.Alias.LocalName, member.DefaultValue, xelemValue, Options.Culture),
-                        member.TreatErrorsAs);
+                        new YAXDefaultValueCannotBeAssigned(member.Alias.LocalName, member.DefaultValue,
+                            xElementValue, Options.Culture), Options.ExceptionBehavior);
                 }
             }
-            else if (memberType == typeof(string))
+
+            return false;
+        }
+
+        private bool TrySetValueForString(object obj, string elemValue, XElement xElementValue, MemberWrapper member,
+            Type memberType)
+        {
+            if (memberType != typeof(string)) return false;
+
+            if (string.IsNullOrEmpty(elemValue) && xElementValue != null)
+                elemValue = xElementValue.IsEmpty ? null : string.Empty;
+
+            try
             {
-                if (string.IsNullOrEmpty(elemValue) && xelemValue != null)
-                    elemValue = xelemValue.IsEmpty ? null : string.Empty;
-
-                try
-                {
-                    member.SetValue(o, elemValue);
-                }
-                catch
-                {
-                    OnExceptionOccurred(new YAXPropertyCannotBeAssignedTo(member.Alias.LocalName, xelemValue),
-                        Options.ExceptionBehavior);
-                }
+                member.SetValue(obj, elemValue);
+                return true;
             }
-            else if (ReflectionUtils.IsBasicType(memberType))
+            catch
             {
-                object convertedObj;
-
-                try
-                {
-                    if (ReflectionUtils.IsNullable(memberType) && string.IsNullOrEmpty(elemValue))
-                        convertedObj = member.DefaultValue;
-                    else
-                        convertedObj = ReflectionUtils.ConvertBasicType(elemValue, memberType, Options.Culture);
-
-                    try
-                    {
-                        member.SetValue(o, convertedObj);
-                    }
-                    catch
-                    {
-                        OnExceptionOccurred(new YAXPropertyCannotBeAssignedTo(member.Alias.LocalName, xelemValue),
-                            Options.ExceptionBehavior);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    if (ex is YAXException) throw;
-
-                    OnExceptionOccurred(new YAXBadlyFormedInput(member.Alias.LocalName, elemValue, xelemValue),
-                        member.TreatErrorsAs);
-
-                    try
-                    {
-                        member.SetValue(o, member.DefaultValue);
-                    }
-                    catch
-                    {
-                        OnExceptionOccurred(
-                            new YAXDefaultValueCannotBeAssigned(member.Alias.LocalName, member.DefaultValue,
-                                xelemValue, Options.Culture), Options.ExceptionBehavior);
-                    }
-                }
+                OnExceptionOccurred(new YAXPropertyCannotBeAssignedTo(member.Alias.LocalName, xElementValue),
+                    Options.ExceptionBehavior);
             }
-            else if (member.IsTreatedAsDictionary && member.DictionaryAttributeInstance != null)
+
+            return false;
+        }
+
+        private bool TrySetValueForEmptyElement(object obj, MemberWrapper member, Type memberType, XElement xElementValue)
+        {
+            if (xElementValue == null || !XMLUtils.IsElementCompletelyEmpty(xElementValue) ||
+                ReflectionUtils.IsBasicType(memberType) || member.IsTreatedAsCollection ||
+                member.IsTreatedAsDictionary || AtLeastOneOfMembersExists(xElementValue, memberType)) return false;
+
+            try
             {
-                DeserializeTaggedDictionaryMember(o, member, xelemValue);
+                member.SetValue(obj, member.DefaultValue);
+                return true;
             }
-            else if (member.IsTreatedAsCollection)
+            catch
             {
-                DeserializeCollectionMember(o, member, memberType, elemValue, xelemValue);
+                OnExceptionOccurred(
+                    new YAXDefaultValueCannotBeAssigned(member.Alias.LocalName, member.DefaultValue, xElementValue,
+                        Options.Culture),
+                    member.TreatErrorsAs);
             }
-            else
-            {
-                var namespaceToOverride = member.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone();
-                var ser = NewInternalSerializer(memberType, namespaceToOverride, null);
 
-                ser.IsCreatedToDeserializeANonCollectionMember =
-                    !(member.IsTreatedAsDictionary || member.IsTreatedAsCollection);
+            return false;
+        }
 
-                if (_desObject != null) // i.e. it is in resuming mode
-                    ser.SetDeserializationBaseObject(member.GetValue(o));
+        private void GetRealTypeIfSpecified(XElement xElementValue, bool isRealTypeAttributeNotRelevant, ref Type memberType)
+        {
+            // try to retrieve the real-type if specified
+            if (xElementValue == null || isRealTypeAttributeNotRelevant) return;
 
-                var convertedObj = ser.DeserializeBase(xelemValue);
-                FinalizeNewSerializer(ser, false);
+            var realTypeAttribute = xElementValue.Attribute_NamespaceSafe(
+                Options.Namespace.Uri + Options.AttributeName.RealType,
+                _documentDefaultNamespace);
 
-                try
-                {
-                    member.SetValue(o, convertedObj);
-                }
-                catch
-                {
-                    OnExceptionOccurred(new YAXPropertyCannotBeAssignedTo(member.Alias.LocalName, xelemValue),
-                        Options.ExceptionBehavior);
-                }
-            }
+            if (realTypeAttribute == null) return;
+
+            var realType = ReflectionUtils.GetTypeByName(realTypeAttribute.Value);
+            if (realType != null) memberType = realType;
         }
 
 #nullable enable
