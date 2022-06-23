@@ -1336,8 +1336,7 @@ namespace YAXLib
                     }
                     else
                     {
-                        if (keySerializer == null)
-                            keySerializer = NewInternalSerializer(keyType, keyAlias.Namespace, null);
+                        keySerializer ??= NewInternalSerializer(keyType, keyAlias.Namespace, null);
 
                         key = keySerializer.DeserializeBase(childElem.Element(keyAlias));
                         FinalizeNewSerializer(keySerializer, false);
@@ -1361,8 +1360,7 @@ namespace YAXLib
                     }
                     else
                     {
-                        if (valueSerializer == null)
-                            valueSerializer = NewInternalSerializer(valueType, valueAlias.Namespace, null);
+                        valueSerializer ??= NewInternalSerializer(valueType, valueAlias.Namespace, null);
 
                         value = valueSerializer.DeserializeBase(childElem.Element(valueAlias));
                         FinalizeNewSerializer(valueSerializer, false);
@@ -1372,7 +1370,6 @@ namespace YAXLib
                 try
                 {
                     type.InvokeMethod("Add", dic, new[] {key, value});
-                    //type.InvokeMember("Add", BindingFlags.InvokeMethod, null, dic, new object[] { key, value });
                 }
                 catch
                 {
