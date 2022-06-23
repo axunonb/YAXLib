@@ -7,7 +7,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Xml;
 using System.Xml.Linq;
 using YAXLib.Attributes;
@@ -1275,6 +1274,7 @@ namespace YAXLib
             return result;
         }
 
+#nullable enable
         private object DeserializeTaggedDictionaryValue(XElement xElementValue, XName alias, Type type,
             YAXCollectionAttribute collAttributeInstance, YAXDictionaryAttribute dictAttrInstance)
         {
@@ -1308,8 +1308,10 @@ namespace YAXLib
 
             foreach (var childElem in xElementValue.Elements(eachElementName))
             {
-                object key = null, value = null;
-                YAXSerializer keySerializer = null, valueSerializer = null;
+                object? key = null, value = null;
+                YAXSerializer? keySerializer = null, valueSerializer = null;
+
+                if (childElem == null) continue;
 
                 var isKeyFound = VerifyDictionaryPairElements(ref keyType, ref isKeyAttribute, ref isKeyContent, keyAlias,
                     childElem);
@@ -1320,52 +1322,12 @@ namespace YAXLib
                     continue;
 
                 if (isKeyFound)
-                {
-                    if (isKeyAttribute)
-                    {
-                        key = ReflectionUtils.ConvertBasicType(
-                            childElem.Attribute_NamespaceSafe(keyAlias, _documentDefaultNamespace).Value, keyType, Options.Culture);
-                    }
-                    else if (isKeyContent)
-                    {
-                        key = ReflectionUtils.ConvertBasicType(childElem.GetXmlContent(), keyType, Options.Culture);
-                    }
-                    else if (ReflectionUtils.IsBasicType(keyType))
-                    {
-                        key = ReflectionUtils.ConvertBasicType(childElem.Element(keyAlias).Value, keyType, Options.Culture);
-                    }
-                    else
-                    {
-                        keySerializer ??= NewInternalSerializer(keyType, keyAlias.Namespace, null);
-
-                        key = keySerializer.DeserializeBase(childElem.Element(keyAlias));
-                        FinalizeNewSerializer(keySerializer, false);
-                    }
-                }
+                    key = GetTaggedDictionaryKey(childElem, keyType, keyAlias, isKeyAttribute, isKeyContent,
+                        keySerializer);
 
                 if (isValueFound)
-                {
-                    if (isValueAttribute)
-                    {
-                        value = ReflectionUtils.ConvertBasicType(
-                            childElem.Attribute_NamespaceSafe(valueAlias, _documentDefaultNamespace).Value, valueType, Options.Culture);
-                    }
-                    else if (isValueContent)
-                    {
-                        value = ReflectionUtils.ConvertBasicType(childElem.GetXmlContent(), valueType, Options.Culture);
-                    }
-                    else if (ReflectionUtils.IsBasicType(valueType))
-                    {
-                        value = ReflectionUtils.ConvertBasicType(childElem.Element(valueAlias).Value, valueType, Options.Culture);
-                    }
-                    else
-                    {
-                        valueSerializer ??= NewInternalSerializer(valueType, valueAlias.Namespace, null);
-
-                        value = valueSerializer.DeserializeBase(childElem.Element(valueAlias));
-                        FinalizeNewSerializer(valueSerializer, false);
-                    }
-                }
+                    value = GetTaggedDictionaryValue(childElem, valueAlias, valueType, isValueAttribute, isValueContent,
+                        valueSerializer);
 
                 try
                 {
@@ -1375,7 +1337,7 @@ namespace YAXLib
                 {
                     OnExceptionOccurred(
                         new YAXCannotAddObjectToCollection(alias.LocalName,
-                            new KeyValuePair<object, object>(key, value), childElem),
+                            new KeyValuePair<object?, object?>(key, value), childElem),
                         Options.ExceptionBehavior);
                 }
             }
@@ -1383,6 +1345,64 @@ namespace YAXLib
             return dic;
         }
 
+        private object GetTaggedDictionaryValue(XElement childElem, XName valueAlias, Type valueType, bool isValueAttribute,
+            bool isValueContent, YAXSerializer? valueSerializer)
+        {
+            object value;
+            if (isValueAttribute)
+            {
+                value = ReflectionUtils.ConvertBasicType(
+                    childElem.Attribute_NamespaceSafe(valueAlias, _documentDefaultNamespace).Value, valueType, Options.Culture);
+            }
+            else if (isValueContent)
+            {
+                value = ReflectionUtils.ConvertBasicType(childElem.GetXmlContent(), valueType, Options.Culture);
+            }
+            else if (ReflectionUtils.IsBasicType(valueType))
+            {
+                value = ReflectionUtils.ConvertBasicType(childElem.Element(valueAlias)!.Value, valueType, Options.Culture);
+            }
+            else
+            {
+                valueSerializer ??= NewInternalSerializer(valueType, valueAlias.Namespace, null);
+
+                value = valueSerializer.DeserializeBase(childElem.Element(valueAlias));
+                FinalizeNewSerializer(valueSerializer, false);
+            }
+
+            return value;
+        }
+
+        private object GetTaggedDictionaryKey(XElement xElement, Type keyType, XName keyAlias, bool isKeyAttribute,
+            bool isKeyContent, YAXSerializer? keySerializer)
+        {
+            object key;
+            if (isKeyAttribute)
+            {
+                key = ReflectionUtils.ConvertBasicType(
+                    xElement.Attribute_NamespaceSafe(keyAlias, _documentDefaultNamespace).Value, keyType, Options.Culture);
+            }
+            else if (isKeyContent)
+            {
+                key = ReflectionUtils.ConvertBasicType(xElement.GetXmlContent(), keyType, Options.Culture);
+            }
+            else if (ReflectionUtils.IsBasicType(keyType))
+            {
+                key = ReflectionUtils.ConvertBasicType(xElement.Element(keyAlias)!.Value, keyType, Options.Culture);
+            }
+            else
+            {
+                keySerializer ??= NewInternalSerializer(keyType, keyAlias.Namespace, null);
+
+                key = keySerializer.DeserializeBase(xElement.Element(keyAlias));
+                FinalizeNewSerializer(keySerializer, false);
+            }
+
+            return key;
+        }
+
+
+#nullable disable
         private void GetDictionaryAttributeDetails(YAXDictionaryAttribute dictAttrInstance, Type keyType, Type valueType,
             XName alias, ref XName eachElementName, out bool isKeyAttribute, out bool isKeyContent, out bool isValueAttribute,
             out bool isValueContent, ref XName keyAlias, ref XName valueAlias)
