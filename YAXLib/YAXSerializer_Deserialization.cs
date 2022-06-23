@@ -1275,81 +1275,45 @@ namespace YAXLib
             return result;
         }
 
-        private object DeserializeTaggedDictionaryValue(XElement xelemValue, XName alias, Type type,
-            YAXCollectionAttribute colAttributeInstance, YAXDictionaryAttribute dicAttrInstance)
+        private object DeserializeTaggedDictionaryValue(XElement xElementValue, XName alias, Type type,
+            YAXCollectionAttribute collAttributeInstance, YAXDictionaryAttribute dictAttrInstance)
         {
-            // otherwise the "else if(member.IsTreatedAsCollection)" block solves the problem
-            Type keyType, valueType;
-            if (!ReflectionUtils.IsIDictionary(type, out keyType, out valueType))
-                throw new Exception("elemValue must be a Dictionary");
+            if (!ReflectionUtils.IsIDictionary(type, out var keyType, out var valueType))
+                throw new ArgumentException("Type must be a Dictionary", nameof(type));
 
             // deserialize non-collection fields
             var namespaceToOverride = alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone();
             var containerSer = NewInternalSerializer(type, namespaceToOverride, null);
             containerSer.IsCreatedToDeserializeANonCollectionMember = true;
             containerSer.RemoveDeserializedXmlNodes = true;
-            var dic = containerSer.DeserializeBase(xelemValue);
+            var dic = containerSer.DeserializeBase(xElementValue);
             FinalizeNewSerializer(containerSer, false);
 
-            // now try to deserialize collection fields
-            Type pairType = null;
-            ReflectionUtils.IsIEnumerable(type, out pairType);
+            // deserialize collection fields
+            ReflectionUtils.IsIEnumerable(type, out var pairType);
             XName eachElementName = StringUtils.RefineSingleElement(ReflectionUtils.GetTypeFriendlyName(pairType));
-            var isKeyAttrib = false;
-            var isValueAttrib = false;
-            var isKeyContent = false;
-            var isValueContent = false;
             var keyAlias = alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone() + "Key";
             var valueAlias = alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone() + "Value";
 
-            if (colAttributeInstance != null && colAttributeInstance.EachElementName != null)
+            if (collAttributeInstance is { EachElementName: { } })
             {
-                eachElementName = StringUtils.RefineSingleElement(colAttributeInstance.EachElementName);
+                eachElementName = StringUtils.RefineSingleElement(collAttributeInstance.EachElementName);
                 eachElementName =
                     eachElementName.OverrideNsIfEmpty(alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone());
             }
 
-            if (dicAttrInstance != null)
-            {
-                if (dicAttrInstance.EachPairName != null)
-                {
-                    eachElementName = StringUtils.RefineSingleElement(dicAttrInstance.EachPairName);
-                    eachElementName =
-                        eachElementName.OverrideNsIfEmpty(alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone());
-                }
+            GetDictionaryAttributeDetails(dictAttrInstance, keyType, valueType, alias, ref eachElementName,
+                out var isKeyAttribute, out var isKeyContent, out var isValueAttribute, out var isValueContent,
+                ref keyAlias, ref valueAlias);
 
-                if (dicAttrInstance.SerializeKeyAs == YAXNodeTypes.Attribute)
-                    isKeyAttrib = ReflectionUtils.IsBasicType(keyType);
-                else if (dicAttrInstance.SerializeKeyAs == YAXNodeTypes.Content)
-                    isKeyContent = ReflectionUtils.IsBasicType(keyType);
-
-                if (dicAttrInstance.SerializeValueAs == YAXNodeTypes.Attribute)
-                    isValueAttrib = ReflectionUtils.IsBasicType(valueType);
-                else if (dicAttrInstance.SerializeValueAs == YAXNodeTypes.Content)
-                    isValueContent = ReflectionUtils.IsBasicType(valueType);
-
-                if (dicAttrInstance.KeyName != null)
-                {
-                    keyAlias = StringUtils.RefineSingleElement(dicAttrInstance.KeyName);
-                    keyAlias = keyAlias.OverrideNsIfEmpty(alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone());
-                }
-
-                if (dicAttrInstance.ValueName != null)
-                {
-                    valueAlias = StringUtils.RefineSingleElement(dicAttrInstance.ValueName);
-                    valueAlias =
-                        valueAlias.OverrideNsIfEmpty(alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone());
-                }
-            }
-
-            foreach (var childElem in xelemValue.Elements(eachElementName))
+            foreach (var childElem in xElementValue.Elements(eachElementName))
             {
                 object key = null, value = null;
-                YAXSerializer keySer = null, valueSer = null;
+                YAXSerializer keySerializer = null, valueSerializer = null;
 
-                var isKeyFound = VerifyDictionaryPairElements(ref keyType, ref isKeyAttrib, ref isKeyContent, keyAlias,
+                var isKeyFound = VerifyDictionaryPairElements(ref keyType, ref isKeyAttribute, ref isKeyContent, keyAlias,
                     childElem);
-                var isValueFound = VerifyDictionaryPairElements(ref valueType, ref isValueAttrib, ref isValueContent,
+                var isValueFound = VerifyDictionaryPairElements(ref valueType, ref isValueAttribute, ref isValueContent,
                     valueAlias, childElem);
 
                 if (!isKeyFound && !isValueFound)
@@ -1357,7 +1321,7 @@ namespace YAXLib
 
                 if (isKeyFound)
                 {
-                    if (isKeyAttrib)
+                    if (isKeyAttribute)
                     {
                         key = ReflectionUtils.ConvertBasicType(
                             childElem.Attribute_NamespaceSafe(keyAlias, _documentDefaultNamespace).Value, keyType, Options.Culture);
@@ -1372,17 +1336,17 @@ namespace YAXLib
                     }
                     else
                     {
-                        if (keySer == null)
-                            keySer = NewInternalSerializer(keyType, keyAlias.Namespace, null);
+                        if (keySerializer == null)
+                            keySerializer = NewInternalSerializer(keyType, keyAlias.Namespace, null);
 
-                        key = keySer.DeserializeBase(childElem.Element(keyAlias));
-                        FinalizeNewSerializer(keySer, false);
+                        key = keySerializer.DeserializeBase(childElem.Element(keyAlias));
+                        FinalizeNewSerializer(keySerializer, false);
                     }
                 }
 
                 if (isValueFound)
                 {
-                    if (isValueAttrib)
+                    if (isValueAttribute)
                     {
                         value = ReflectionUtils.ConvertBasicType(
                             childElem.Attribute_NamespaceSafe(valueAlias, _documentDefaultNamespace).Value, valueType, Options.Culture);
@@ -1397,11 +1361,11 @@ namespace YAXLib
                     }
                     else
                     {
-                        if (valueSer == null)
-                            valueSer = NewInternalSerializer(valueType, valueAlias.Namespace, null);
+                        if (valueSerializer == null)
+                            valueSerializer = NewInternalSerializer(valueType, valueAlias.Namespace, null);
 
-                        value = valueSer.DeserializeBase(childElem.Element(valueAlias));
-                        FinalizeNewSerializer(valueSer, false);
+                        value = valueSerializer.DeserializeBase(childElem.Element(valueAlias));
+                        FinalizeNewSerializer(valueSerializer, false);
                     }
                 }
 
@@ -1420,6 +1384,49 @@ namespace YAXLib
             }
 
             return dic;
+        }
+
+        private void GetDictionaryAttributeDetails(YAXDictionaryAttribute dictAttrInstance, Type keyType, Type valueType,
+            XName alias, ref XName eachElementName, out bool isKeyAttribute, out bool isKeyContent, out bool isValueAttribute,
+            out bool isValueContent, ref XName keyAlias, ref XName valueAlias)
+        {
+            // Set defaults
+            isKeyAttribute = false;
+            isValueAttribute = false;
+            isKeyContent = false;
+            isValueContent = false;
+
+            if (dictAttrInstance == null) return;
+
+            if (dictAttrInstance.EachPairName != null)
+            {
+                eachElementName = StringUtils.RefineSingleElement(dictAttrInstance.EachPairName);
+                eachElementName =
+                    eachElementName.OverrideNsIfEmpty(alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone());
+            }
+
+            if (dictAttrInstance.SerializeKeyAs == YAXNodeTypes.Attribute)
+                isKeyAttribute = ReflectionUtils.IsBasicType(keyType);
+            else if (dictAttrInstance.SerializeKeyAs == YAXNodeTypes.Content)
+                isKeyContent = ReflectionUtils.IsBasicType(keyType);
+
+            if (dictAttrInstance.SerializeValueAs == YAXNodeTypes.Attribute)
+                isValueAttribute = ReflectionUtils.IsBasicType(valueType);
+            else if (dictAttrInstance.SerializeValueAs == YAXNodeTypes.Content)
+                isValueContent = ReflectionUtils.IsBasicType(valueType);
+
+            if (dictAttrInstance.KeyName != null)
+            {
+                keyAlias = StringUtils.RefineSingleElement(dictAttrInstance.KeyName);
+                keyAlias = keyAlias.OverrideNsIfEmpty(alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone());
+            }
+
+            if (dictAttrInstance.ValueName != null)
+            {
+                valueAlias = StringUtils.RefineSingleElement(dictAttrInstance.ValueName);
+                valueAlias =
+                    valueAlias.OverrideNsIfEmpty(alias.Namespace.IfEmptyThen(TypeNamespace).IfEmptyThenNone());
+            }
         }
 
         /// <summary>
