@@ -396,6 +396,7 @@ namespace YAXLib
             return selfBaseType == otherBaseType;
         }
 
+#pragma warning disable S3776 // disable sonar cognitive complexity warnings
         /// <summary>
         ///     Determines whether the specified type is equal or inherited from another specified type.
         /// </summary>
@@ -482,6 +483,72 @@ namespace YAXLib
 
             return false;
         }
+
+                /// <summary>
+        ///     Converts the specified object from a basic type to another type as specified.
+        ///     It is meant by basic types, primitive data types, strings, and enums.
+        /// </summary>
+        /// <param name="value">The object to be converted.</param>
+        /// <param name="dstType">the destination type of conversion.</param>
+        /// <param name="culture">The <see cref="CultureInfo"/> to use for culture-specific value formats.</param>
+        /// <returns>the converted object</returns>
+        public static object ConvertBasicType(object value, Type dstType, CultureInfo culture)
+        {
+            object convertedObj = null;
+            if (dstType.IsEnum)
+            {
+                var typeWrapper = TypeWrappersPool.Pool.GetTypeWrapper(dstType, null);
+                convertedObj = typeWrapper.EnumWrapper.ParseAlias(value.ToString());
+            }
+            else if (dstType == typeof(DateTime))
+            {
+                convertedObj = StringUtils.ParseDateTimeTimeZoneSafe(value.ToString(), culture);
+            }
+            else if (dstType == typeof(decimal))
+            {
+                // to fix the asymmetry of used locales for this type between serialization and deserialization
+                convertedObj = Convert.ChangeType(value, dstType, culture);
+            }
+            else if (dstType == typeof(bool))
+            {
+                var strValue = value.ToString().Trim().ToLower();
+                if (strValue == "false" || strValue == "no" || strValue == "0")
+                {
+                    convertedObj = false;
+                }
+                else if (strValue == "true" || strValue == "yes" || strValue == "1")
+                {
+                    convertedObj = true;
+                }
+                else
+                {
+                    var boolIntValue = 0;
+                    if (int.TryParse(strValue, out boolIntValue))
+                        convertedObj = boolIntValue != 0;
+                    else
+                        throw new Exception("The specified value is not recognized as boolean: " + strValue);
+                }
+            }
+            else if (dstType == typeof(Guid))
+            {
+                return new Guid(value.ToString());
+            }
+            else
+            {
+                Type nullableType;
+                if (IsNullable(dstType, out nullableType))
+                {
+                    if (value == null || value.ToString() == string.Empty)
+                        return null;
+                    return ConvertBasicType(value, nullableType, culture);
+                }
+
+                convertedObj = Convert.ChangeType(value, dstType, culture);
+            }
+
+            return convertedObj;
+        }
+#pragma warning restore S3776 // enable sonar cognitive complexity warnings
 
         /// <summary>
         ///     Determines whether the specified type is nullable.
@@ -605,71 +672,6 @@ namespace YAXLib
             return formattedObject ?? src;
         }
 #nullable disable
-
-        /// <summary>
-        ///     Converts the specified object from a basic type to another type as specified.
-        ///     It is meant by basic types, primitive data types, strings, and enums.
-        /// </summary>
-        /// <param name="value">The object to be converted.</param>
-        /// <param name="dstType">the destination type of conversion.</param>
-        /// <param name="culture">The <see cref="CultureInfo"/> to use for culture-specific value formats.</param>
-        /// <returns>the converted object</returns>
-        public static object ConvertBasicType(object value, Type dstType, CultureInfo culture)
-        {
-            object convertedObj = null;
-            if (dstType.IsEnum)
-            {
-                var typeWrapper = TypeWrappersPool.Pool.GetTypeWrapper(dstType, null);
-                convertedObj = typeWrapper.EnumWrapper.ParseAlias(value.ToString());
-            }
-            else if (dstType == typeof(DateTime))
-            {
-                convertedObj = StringUtils.ParseDateTimeTimeZoneSafe(value.ToString(), culture);
-            }
-            else if (dstType == typeof(decimal))
-            {
-                // to fix the asymmetry of used locales for this type between serialization and deserialization
-                convertedObj = Convert.ChangeType(value, dstType, culture);
-            }
-            else if (dstType == typeof(bool))
-            {
-                var strValue = value.ToString().Trim().ToLower();
-                if (strValue == "false" || strValue == "no" || strValue == "0")
-                {
-                    convertedObj = false;
-                }
-                else if (strValue == "true" || strValue == "yes" || strValue == "1")
-                {
-                    convertedObj = true;
-                }
-                else
-                {
-                    var boolIntValue = 0;
-                    if (int.TryParse(strValue, out boolIntValue))
-                        convertedObj = boolIntValue != 0;
-                    else
-                        throw new Exception("The specified value is not recognized as boolean: " + strValue);
-                }
-            }
-            else if (dstType == typeof(Guid))
-            {
-                return new Guid(value.ToString());
-            }
-            else
-            {
-                Type nullableType;
-                if (IsNullable(dstType, out nullableType))
-                {
-                    if (value == null || value.ToString() == string.Empty)
-                        return null;
-                    return ConvertBasicType(value, nullableType, culture);
-                }
-
-                convertedObj = Convert.ChangeType(value, dstType, culture);
-            }
-
-            return convertedObj;
-        }
 
         /// <summary>
         ///     Searches all loaded assemblies to find a type with a special name.
