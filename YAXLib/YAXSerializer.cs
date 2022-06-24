@@ -3,8 +3,11 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 using YAXLib.Enums;
 using YAXLib.Exceptions;
@@ -17,75 +20,13 @@ namespace YAXLib
     ///     policy.
     ///     This class also supports serializing most of the collection classes such as the Dictionary generic class.
     /// </summary>
-    public partial class YAXSerializer
+    public class YAXSerializer
     {
-        #region Fields
-
-        /// <summary>
-        ///     The list of all errors that have occurred.
-        /// </summary>
-        private readonly YAXParsingErrors _parsingErrors;
-
-        /// <summary>
-        ///     A manager that keeps a map of namespaces to their prefixes (if any) to be added ultimately to the xml result
-        /// </summary>
-        private readonly XmlNamespaceManager _xmlNamespaceManager;
-
-        /// <summary>
-        ///     a reference to the base xml element used during serialization.
-        /// </summary>
-        private XElement _baseElement;
-
-        /// <summary>
-        ///     Reference to a pre assigned de-serialization base object
-        /// </summary>
-        private object _desObject;
-
-        /// <summary>
-        ///     The main document's default namespace. This is stored so that if an attribute has the default namespace,
-        ///     it should be serialized without namespace assigned to it. Storing it here does NOT mean that elements
-        ///     and attributes without any namespace must adapt this namespace. It is just for comparison and control
-        ///     purposes.
-        /// </summary>
-        /// <remarks>
-        ///     Is set by method <see cref="YAXSerializer.FindDocumentDefaultNamespace"/>
-        /// </remarks>
-        private XNamespace _documentDefaultNamespace;
-
-        /// <summary>
-        ///     Specifies whether an exception is occurred during the de-serialization of the current member
-        /// </summary>
-        private bool _exceptionOccurredDuringMemberDeserialization;
-
-        /// <summary>
-        ///     <see langword="true" /> if this instance is busy serializing objects, <see langword="false" /> otherwise.
-        /// </summary>
-        private bool _isSerializing;
-
-        /// <summary>
-        ///     XML document object which will hold the resulting serialization
-        /// </summary>
-        private XDocument _mainDocument;
-
-        /// <summary>
-        ///     A collection of already serialized objects, kept for the sake of loop detection and preventing stack overflow
-        ///     exception
-        /// </summary>
-        private Stack<object> _serializedStack;
-
-        /// <summary>
-        ///     The class or structure that is to be serialized/deserialized.
-        /// </summary>
-        private Type _type;
-
-        /// <summary>
-        ///     The type wrapper for the underlying type used in the serializer
-        /// </summary>
-        private UdtWrapper _udtWrapper;
+        #region Private fields
 
         #endregion
 
-        #region Constructors
+        #region Public constructors
 
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXSerializer" /> class.
@@ -156,33 +97,214 @@ namespace YAXLib
         /// <param name="options">The <see cref="SerializerOptions"/> settings to influence the process of serialization or de-serialization</param>
         public YAXSerializer(Type t, SerializerOptions options)
         {
-            _type = t;
+            Type = t;
             Options = options;
             
             // this must be the last call
-            _parsingErrors = new YAXParsingErrors();
-            _xmlNamespaceManager = new XmlNamespaceManager();
-            _udtWrapper = TypeWrappersPool.Pool.GetTypeWrapper(_type, this);
-            if (_udtWrapper.HasNamespace)
-                TypeNamespace = _udtWrapper.Namespace;
+            ParsingErrors = new YAXParsingErrors();
+            XmlNamespaceManager = new XmlNamespaceManager();
+            UdtWrapper = TypeWrappersPool.Pool.GetTypeWrapper(Type, this);
+            if (UdtWrapper.HasNamespace)
+                TypeNamespace = UdtWrapper.Namespace;
+
+            Serialization = new Serialization(this);
+            Deserialization = new Deserialization(this);
         }
 
         #endregion
 
-        #region Properties
+        #region Public serialization methods
 
         /// <summary>
-        ///     Gets or sets the number of recursions (number of total created <see cref="YAXSerializer"/> instances).
+        ///     Serializes the specified object and returns a string containing the XML.
         /// </summary>
-        internal int RecursionCount { get; set; }
-
-        internal XmlNamespaceManager XmlNamespaceManager => _xmlNamespaceManager;
-
-        internal XNamespace TypeNamespace { get; set; }
-
-        internal bool HasTypeNamespace => TypeNamespace.IsEmpty();
+        /// <param name="obj">The object to serialize.</param>
+        /// <returns>A <code>System.String</code> containing the XML</returns>
+        public string Serialize(object obj)
+        {
+            return Serialization.SerializeXDocument(obj).ToString();
+        }
+        
+        /// <summary>
+        ///     Serializes the specified object into a <c>TextWriter</c> instance.
+        /// </summary>
+        /// <param name="obj">The object to serialize.</param>
+        /// <param name="textWriter">The <c>TextWriter</c> instance.</param>
+        public void Serialize(object obj, TextWriter textWriter)
+        {
+            textWriter.Write(Serialize(obj));
+        }
 
         /// <summary>
+        ///     Serializes the specified object into a <c>XmlWriter</c> instance.
+        /// </summary>
+        /// <param name="obj">The object to serialize.</param>
+        /// <param name="xmlWriter">The <c>XmlWriter</c> instance.</param>
+        public void Serialize(object obj, XmlWriter xmlWriter)
+        {
+            Serialization.SerializeXDocument(obj).WriteTo(xmlWriter);
+        }
+
+        /// <summary>
+        ///     Serializes the specified object and returns an instance of <c>XDocument</c> containing the result.
+        /// </summary>
+        /// <param name="obj">The object to serialize.</param>
+        /// <returns>An instance of <c>XDocument</c> containing the resulting XML</returns>
+        public XDocument SerializeToXDocument(object obj)
+        {
+            return Serialization.SerializeXDocument(obj);
+        }
+        
+        /// <summary>
+        ///     Serializes the specified object to file.
+        /// </summary>
+        /// <param name="obj">The object to serialize.</param>
+        /// <param name="fileName">Path to the file.</param>
+        public void SerializeToFile(object obj, string fileName)
+        {
+            var ser = string.Format(
+                Options.Culture,
+                "{0}{1}{2}",
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>",
+                Environment.NewLine,
+                Serialize(obj));
+            File.WriteAllText(fileName, ser, Encoding.UTF8);
+        }
+
+        #endregion
+
+        #region Public deserialization methods
+
+        /// <summary>
+        ///     Deserializes the specified string containing the XML serialization and returns an object.
+        /// </summary>
+        /// <param name="input">The input string containing the XML serialization.</param>
+        /// <returns>The deserialized object.</returns>
+        public object Deserialize(string input)
+        {
+            try
+            {
+                using TextReader tr = new StringReader(input);
+                var xDocument = XDocument.Load(tr, Deserialization.GetXmlLoadOptions());
+                var baseElement = xDocument.Root;
+                FindDocumentDefaultNamespace();
+                return Deserialization.DeserializeBase(baseElement);
+            }
+            catch (XmlException ex)
+            {
+                Deserialization.OnExceptionOccurred(new YAXBadlyFormedXML(ex, ex.LineNumber, ex.LinePosition), Options.ExceptionBehavior);
+                return null;
+            }
+        }
+
+        /// <summary>
+        ///     Deserializes an object while reading input from an instance of <c>XmlReader</c>.
+        /// </summary>
+        /// <param name="xmlReader">The <c>XmlReader</c> instance to read input from.</param>
+        /// <returns>The deserialized object.</returns>
+        public object Deserialize(XmlReader xmlReader)
+        {
+            try
+            {
+                var xDocument = XDocument.Load(xmlReader, Deserialization.GetXmlLoadOptions());
+                var baseElement = xDocument.Root;
+                FindDocumentDefaultNamespace();
+                return Deserialization.DeserializeBase(baseElement);
+            }
+            catch (XmlException ex)
+            {
+                Deserialization.OnExceptionOccurred(new YAXBadlyFormedXML(ex, ex.LineNumber, ex.LinePosition), Options.ExceptionBehavior);
+                return null;
+            }
+        }
+
+        /// <summary>
+        ///     Deserializes an object while reading input from an instance of <c>TextReader</c>.
+        /// </summary>
+        /// <param name="textReader">The <c>TextReader</c> instance to read input from.</param>
+        /// <returns>The deserialized object.</returns>
+        public object Deserialize(TextReader textReader)
+        {
+            try
+            {
+                var xDocument = XDocument.Load(textReader, Deserialization.GetXmlLoadOptions());
+                var baseElement = xDocument.Root;
+                FindDocumentDefaultNamespace();
+                return Deserialization.DeserializeBase(baseElement);
+            }
+            catch (XmlException ex)
+            {
+                Deserialization.OnExceptionOccurred(new YAXBadlyFormedXML(ex, ex.LineNumber, ex.LinePosition), Options.ExceptionBehavior);
+                return null;
+            }
+        }
+
+        /// <summary>
+        ///     Deserializes an object while reading from an instance of <c>XElement</c>
+        /// </summary>
+        /// <param name="element">The <c>XElement</c> instance to read from.</param>
+        /// <returns>The deserialized object</returns>
+        public object Deserialize(XElement element)
+        {
+            try
+            {
+                var xDocument = new XDocument();
+                xDocument.Add(element);
+                FindDocumentDefaultNamespace();
+                return Deserialization.DeserializeBase(element);
+            }
+            catch (XmlException ex)
+            {
+                Deserialization.OnExceptionOccurred(new YAXBadlyFormedXML(ex, ex.LineNumber, ex.LinePosition), Options.ExceptionBehavior);
+                return null;
+            }
+        }
+
+        /// <summary>
+        ///     Deserializes an object from the specified file which contains the XML serialization of the object.
+        /// </summary>
+        /// <param name="fileName">Path to the file.</param>
+        /// <returns>The deserialized object.</returns>
+        public object DeserializeFromFile(string fileName)
+        {
+            try
+            {
+                return Deserialize(File.ReadAllText(fileName));
+            }
+            catch (XmlException ex)
+            {
+                Deserialization.OnExceptionOccurred(new YAXBadlyFormedXML(ex, ex.LineNumber, ex.LinePosition), Options.ExceptionBehavior);
+                return null;
+            }
+        }
+
+        /// <summary>
+        ///     Sets the object used as the base object in the next stage of de-serialization.
+        ///     This method enables multi-stage deserialization for YAXLib.
+        /// </summary>
+        /// <param name="obj">The object used as the base object in the next stage of deserialization.</param>
+        public void SetDeserializationBaseObject(object obj)
+        {
+            Deserialization.SetDeserializationBaseObject(obj);
+        }
+
+        #endregion
+
+        #region Other public methods
+
+        /// <summary>
+        ///     Cleans up auxiliary memory used by YAXLib during different sessions of serialization.
+        /// </summary>
+        public static void CleanUpAuxiliaryMemory()
+        {
+            TypeWrappersPool.CleanUp();
+        }
+
+        #endregion
+
+        #region Public Properties
+
+                /// <summary>
         ///     Gets the <see cref="SerializationOption"/> settings
         ///     to influence the process of serialization or de-serialization of <see cref="YAXSerializer"/>s.
         /// </summary>
@@ -210,25 +332,10 @@ namespace YAXLib
         public YAXExceptionHandlingPolicies ExceptionHandlingPolicy => Options.ExceptionHandlingPolicies;
 
         /// <summary>
-        ///     Gets the parsing errors.
+        ///     Gets the parsing errors from deserialization.
         /// </summary>
         /// <value>The parsing errors.</value>
-        public YAXParsingErrors ParsingErrors => _parsingErrors;
-
-        /// <summary>
-        ///     Gets or sets a value indicating whether this instance is created to deserialize a non collection member of another
-        ///     object.
-        /// </summary>
-        /// <value>
-        ///     <see langword="true" /> if this instance is created to deserialize a non collection member of another object; otherwise,
-        ///     <see langword="false" />.
-        /// </value>
-        private bool IsCreatedToDeserializeANonCollectionMember { get; set; }
-
-        /// <summary>
-        ///     Gets or sets a value indicating whether XML elements or attributes should be removed after being deserialized
-        /// </summary>
-        private bool RemoveDeserializedXmlNodes { get; set; }
+        public YAXParsingErrors ParsingErrors { get; }
 
         /// <summary>
         ///     The URI address which holds the xmlns:yaxlib definition.
@@ -286,45 +393,26 @@ namespace YAXLib
 
         #endregion
 
-        internal void SetNamespaceToOverrideEmptyNamespace(XNamespace otherNamespace)
-        {
-            // if namespace info is not already set during construction, 
-            // then set it from the other YAXSerializer instance
-            if (otherNamespace.IsEmpty() && !HasTypeNamespace) TypeNamespace = otherNamespace;
-        }
+        #region Internal methods
 
-        #region Public methods
-
-        /// <summary>
-        ///     Cleans up auxiliary memory used by YAXLib during different sessions of serialization.
-        /// </summary>
-        public static void CleanUpAuxiliaryMemory()
-        {
-            TypeWrappersPool.CleanUp();
-        }
-
-        #endregion
-
-        #region Private methods
-
-        private YAXSerializer NewInternalSerializer(Type type, XNamespace namespaceToOverride,
+        internal YAXSerializer NewInternalSerializer(Type type, XNamespace namespaceToOverride,
             XElement insertionLocation)
         {
             RecursionCount = Options.MaxRecursion == 0 ? 0 : RecursionCount + 1;
             var serializer = new YAXSerializer(type, Options) {RecursionCount = RecursionCount};
             
-            serializer._serializedStack = _serializedStack;
-            serializer._documentDefaultNamespace = _documentDefaultNamespace;
+            serializer.SerializedStack = SerializedStack;
+            serializer.DocumentDefaultNamespace = DocumentDefaultNamespace;
             if (namespaceToOverride != null)
                 serializer.SetNamespaceToOverrideEmptyNamespace(namespaceToOverride);
 
             if (insertionLocation != null)
-                serializer.SetBaseElement(insertionLocation);
+                serializer.Serialization.SetBaseElement(insertionLocation);
 
             return serializer;
         }
 
-        private void FinalizeNewSerializer(YAXSerializer serializer, bool importNamespaces,
+        internal void FinalizeNewSerializer(YAXSerializer serializer, bool importNamespaces,
             bool popFromSerializationStack = true)
         {
             if (serializer == null)
@@ -332,13 +420,13 @@ namespace YAXLib
 
             if (RecursionCount > 0) RecursionCount--;
 
-            if (popFromSerializationStack && _isSerializing && serializer._type != null &&
-                !serializer._type.IsValueType)
-                _serializedStack.Pop();
+            if (popFromSerializationStack && IsSerializing && serializer.Type != null &&
+                !serializer.Type.IsValueType)
+                SerializedStack.Pop();
 
             if (importNamespaces)
-                _xmlNamespaceManager.ImportNamespaces(serializer);
-            _parsingErrors.AddRange(serializer.ParsingErrors);
+                XmlNamespaceManager.ImportNamespaces(serializer);
+            ParsingErrors.AddRange(serializer.ParsingErrors);
         }
 
         /// <summary>
@@ -346,9 +434,9 @@ namespace YAXLib
         ///     This sequence is retrieved according to the field-types specified by the user.
         /// </summary>
         /// <returns>The sequence of fields to be de/serialized for the serializer's underlying type.</returns>
-        private IEnumerable<MemberWrapper> GetFieldsToBeSerialized()
+        internal IEnumerable<MemberWrapper> GetFieldsToBeSerialized()
         {
-            return GetFieldsToBeSerialized(_udtWrapper).OrderBy(t => t.Order);
+            return GetFieldsToBeSerialized(UdtWrapper).OrderBy(t => t.Order);
         }
 
         /// <summary>
@@ -360,7 +448,7 @@ namespace YAXLib
         ///     fields is going to be retrieved.
         /// </param>
         /// <returns>the sequence of fields to be de/serialized for the specified type</returns>
-        private IEnumerable<MemberWrapper> GetFieldsToBeSerialized(UdtWrapper typeWrapper)
+        internal IEnumerable<MemberWrapper> GetFieldsToBeSerialized(UdtWrapper typeWrapper)
         {
             foreach (var member in typeWrapper.UnderlyingType.GetMembers(BindingFlags.Instance |
                                                                          BindingFlags.NonPublic | BindingFlags.Public))
@@ -374,15 +462,91 @@ namespace YAXLib
 
                 var memInfo = new MemberWrapper(member, this);
                 if (memInfo.IsAllowedToBeSerialized(typeWrapper.FieldsToSerialize,
-                        _udtWrapper.DoNotSerializePropertiesWithNoSetter)) yield return memInfo;
+                        UdtWrapper.DoNotSerializePropertiesWithNoSetter)) yield return memInfo;
             }
+        }
+        
+        internal void FindDocumentDefaultNamespace()
+        {
+            if (UdtWrapper.HasNamespace && string.IsNullOrEmpty(UdtWrapper.NamespacePrefix))
+                // it has a default namespace defined (one without a prefix)
+                DocumentDefaultNamespace = UdtWrapper.Namespace; // set the default namespace
+        }
+
+        #endregion
+
+        #region Internal properties
+
+        /// <summary>
+        ///     The main document's default namespace. This is stored so that if an attribute has the default namespace,
+        ///     it should be serialized without namespace assigned to it. Storing it here does NOT mean that elements
+        ///     and attributes without any namespace must adapt this namespace. It is just for comparison and control
+        ///     purposes.
+        /// </summary>
+        /// <remarks>
+        ///     Is set by method <see cref="YAXSerializer.FindDocumentDefaultNamespace"/>
+        /// </remarks>
+        internal XNamespace DocumentDefaultNamespace { get; set; }
+
+        /// <summary>
+        ///     Get an instance of the class used for <see cref="YAXLib.Serialization"/>.
+        /// </summary>
+        internal Serialization Serialization { get; }
+
+        /// <summary>
+        ///     Get an instance of the class used for <see cref="YAXLib.Deserialization"/>.
+        /// </summary>
+        internal Deserialization Deserialization { get; }
+
+        /// <summary>
+        ///     <see langword="true" /> if this instance is busy serializing objects, <see langword="false" /> otherwise.
+        /// </summary>
+        internal bool IsSerializing { get; set; }
+
+        /// <summary>
+        ///     A collection of already serialized objects, kept for the sake of loop detection and preventing stack overflow
+        ///     exception
+        /// </summary>
+        internal Stack<object> SerializedStack { get; set; }
+
+        /// <summary>
+        ///     The class or structure that is to be serialized/deserialized.
+        /// </summary>
+        internal Type Type { get; set; }
+
+        /// <summary>
+        ///     The type wrapper for the underlying type used in the serializer
+        /// </summary>
+        internal UdtWrapper UdtWrapper { get; set; }
+
+        /// <summary>
+        ///     Gets or sets the number of recursions (number of total created <see cref="YAXSerializer"/> instances).
+        /// </summary>
+        internal int RecursionCount { get; set; }
+
+        /// <summary>
+        ///     A manager that keeps a map of namespaces to their prefixes (if any) to be added ultimately to the xml result
+        /// </summary>
+        internal XmlNamespaceManager XmlNamespaceManager { get; }
+
+        internal XNamespace TypeNamespace { get; set; }
+
+        #endregion
+
+        #region Private methods
+
+        private void SetNamespaceToOverrideEmptyNamespace(XNamespace otherNamespace)
+        {
+            // if namespace info is not already set during construction, 
+            // then set it from the other YAXSerializer instance
+            if (otherNamespace.IsEmpty() && !TypeNamespace.IsEmpty()) TypeNamespace = otherNamespace;
         }
 
         private static bool IsValidPropertyOrField(MemberInfo member)
         {
             var name0 = member.Name[0];
             return (char.IsLetter(name0) || name0 == '_') &&
-                    (member.MemberType == MemberTypes.Property || member.MemberType == MemberTypes.Field);
+                   (member.MemberType == MemberTypes.Property || member.MemberType == MemberTypes.Field);
         }
 
         private static bool CanSerializeProperty(PropertyInfo prop)
@@ -396,30 +560,6 @@ namespace YAXLib
                 return false;
 
             return true;
-        }
-
-        /// <summary>
-        ///     Called when an exception occurs inside the library. It applies the exception handling policies.
-        /// </summary>
-        /// <param name="ex">The exception that has occurred.</param>
-        /// <param name="exceptionType">Type of the exception.</param>
-        private void OnExceptionOccurred(YAXException ex, YAXExceptionTypes exceptionType)
-        {
-            _exceptionOccurredDuringMemberDeserialization = true;
-            if (exceptionType == YAXExceptionTypes.Ignore) return;
-
-            _parsingErrors.AddException(ex, exceptionType);
-            if (Options.ExceptionHandlingPolicies == YAXExceptionHandlingPolicies.ThrowWarningsAndErrors ||
-                Options.ExceptionHandlingPolicies == YAXExceptionHandlingPolicies.ThrowErrorsOnly &&
-                exceptionType == YAXExceptionTypes.Error)
-                throw ex;
-        }
-
-        private void FindDocumentDefaultNamespace()
-        {
-            if (_udtWrapper.HasNamespace && string.IsNullOrEmpty(_udtWrapper.NamespacePrefix))
-                // it has a default namespace defined (one without a prefix)
-                _documentDefaultNamespace = _udtWrapper.Namespace; // set the default namespace
         }
 
         #endregion
