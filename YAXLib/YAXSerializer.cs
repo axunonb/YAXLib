@@ -446,15 +446,18 @@ namespace YAXLib
         /// <returns>the sequence of fields to be de/serialized for the specified type</returns>
         internal IEnumerable<MemberWrapper> GetFieldsToBeSerialized(UdtWrapper typeWrapper)
         {
+
+#pragma warning disable S3011 // disable sonar accessibility bypass warning
             foreach (var member in typeWrapper.UnderlyingType.GetMembers(BindingFlags.Instance |
                                                                          BindingFlags.NonPublic | BindingFlags.Public))
+#pragma warning restore S3011 // enable sonar accessibility bypass warning
             {
                 if (!IsValidPropertyOrField(member)) continue;
                 if (member is PropertyInfo prop && !CanSerializeProperty(prop)) continue;
 
-                if (typeWrapper.IsCollectionType || typeWrapper.IsDictionaryType)
-                    if (ReflectionUtils.IsPartOfNetFx(member))
-                        continue;
+                if ((typeWrapper.IsCollectionType || typeWrapper.IsDictionaryType)
+                    && ReflectionUtils.IsPartOfNetFx(member))
+                    continue;
 
                 var memInfo = new MemberWrapper(member, this);
                 if (memInfo.IsAllowedToBeSerialized(typeWrapper.FieldsToSerialize,
