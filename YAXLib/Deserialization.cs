@@ -928,7 +928,6 @@ internal class Deserialization
             try
             {
                 collType.InvokeMethod("Add", dict, new[] { key, value });
-                //colType.InvokeMember("Add", BindingFlags.InvokeMethod, null, dic, new[] { key, value });
             }
             catch
             {

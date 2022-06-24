@@ -48,6 +48,76 @@ namespace YAXLib
             return _mainDocument;
         }
 
+                /// <summary>
+        ///     The base method that performs the whole job of serialization.
+        ///     Other serialization methods call this method to have their job done.
+        /// </summary>
+        /// <param name="obj">The object to be serialized</param>
+        /// <param name="className">Name of the element that contains the serialized object.</param>
+        /// <returns>
+        ///     an instance of <c>XElement</c> which contains the result of
+        ///     serialization of the specified object
+        /// </returns>
+        private XElement SerializeBase(object obj, XName className)
+        {
+            // this is set once again here since internal serializers
+            // must not call public Serialize methods
+            _ys.IsSerializing = true;
+
+            SetBaseElement(className);
+
+            if (_ys.RecursionCount >= _ys.Options.MaxRecursion - 1)
+            {
+                PushObjectToSerializationStack(obj);
+                return _baseElement;
+            }
+
+            if (!_ys.Type.IsValueType)
+            {
+                var alreadySerializedObject = _ys.SerializedStack.FirstOrDefault(x => ReferenceEquals(x, obj));
+                if (alreadySerializedObject != null)
+                {
+                    if (!_ys.UdtWrapper.ThrowUponSerializingCyclingReferences)
+                    {
+                        // although we are not going to serialize anything, push the object to be picked up
+                        // by the pop statement right after serialization
+                        PushObjectToSerializationStack(obj);
+                        return _baseElement;
+                    }
+
+                    throw new YAXCannotSerializeSelfReferentialTypes(_ys.Type);
+                }
+
+                PushObjectToSerializationStack(obj);
+            }
+
+            if (_ys.UdtWrapper.HasComment && _baseElement.Parent == null && _mainDocument != null)
+                foreach (var comment in _ys.UdtWrapper.Comment)
+                    _mainDocument.Add(new XComment(comment));
+
+            // if the containing element is set to preserve spaces, then emit the 
+            // required attribute
+            if (_ys.UdtWrapper.PreservesWhitespace) XMLUtils.AddPreserveSpaceAttribute(_baseElement, _ys.Options.Culture);
+
+            // check if the main class/type has defined custom serializers
+            if (_ys.UdtWrapper.HasCustomSerializer)
+            {
+                InvokeCustomSerializerToElement(_ys.UdtWrapper.CustomSerializerType, obj, _baseElement, null, _ys.UdtWrapper, _ys);
+            }
+            else if (KnownTypes.IsKnowType(_ys.Type))
+            {
+                KnownTypes.Serialize(obj, _baseElement, _ys.TypeNamespace);
+            }
+            else // no custom serializers or known type
+            {
+                SerializeFields(obj);
+            }
+
+            if (_baseElement.Parent == null) _ys.XmlNamespaceManager.AddNamespacesToElement(_baseElement, _ys.DocumentDefaultNamespace, _ys.Options, _ys.UdtWrapper);
+
+            return _baseElement;
+        }
+
         /// <summary>
         ///     One of the base methods that perform the whole job of serialization.
         /// </summary>
@@ -160,76 +230,6 @@ namespace YAXLib
         private void PushObjectToSerializationStack(object obj)
         {
             if (!obj.GetType().IsValueType) _ys.SerializedStack.Push(obj);
-        }
-
-        /// <summary>
-        ///     The base method that performs the whole job of serialization.
-        ///     Other serialization methods call this method to have their job done.
-        /// </summary>
-        /// <param name="obj">The object to be serialized</param>
-        /// <param name="className">Name of the element that contains the serialized object.</param>
-        /// <returns>
-        ///     an instance of <c>XElement</c> which contains the result of
-        ///     serialization of the specified object
-        /// </returns>
-        private XElement SerializeBase(object obj, XName className)
-        {
-            // this is set once again here since internal serializers
-            // must not call public Serialize methods
-            _ys.IsSerializing = true;
-
-            SetBaseElement(className);
-
-            if (_ys.RecursionCount >= _ys.Options.MaxRecursion - 1)
-            {
-                PushObjectToSerializationStack(obj);
-                return _baseElement;
-            }
-
-            if (!_ys.Type.IsValueType)
-            {
-                var alreadySerializedObject = _ys.SerializedStack.FirstOrDefault(x => ReferenceEquals(x, obj));
-                if (alreadySerializedObject != null)
-                {
-                    if (!_ys.UdtWrapper.ThrowUponSerializingCyclingReferences)
-                    {
-                        // although we are not going to serialize anything, push the object to be picked up
-                        // by the pop statement right after serialization
-                        PushObjectToSerializationStack(obj);
-                        return _baseElement;
-                    }
-
-                    throw new YAXCannotSerializeSelfReferentialTypes(_ys.Type);
-                }
-
-                PushObjectToSerializationStack(obj);
-            }
-
-            if (_ys.UdtWrapper.HasComment && _baseElement.Parent == null && _mainDocument != null)
-                foreach (var comment in _ys.UdtWrapper.Comment)
-                    _mainDocument.Add(new XComment(comment));
-
-            // if the containing element is set to preserve spaces, then emit the 
-            // required attribute
-            if (_ys.UdtWrapper.PreservesWhitespace) XMLUtils.AddPreserveSpaceAttribute(_baseElement, _ys.Options.Culture);
-
-            // check if the main class/type has defined custom serializers
-            if (_ys.UdtWrapper.HasCustomSerializer)
-            {
-                InvokeCustomSerializerToElement(_ys.UdtWrapper.CustomSerializerType, obj, _baseElement, null, _ys.UdtWrapper, _ys);
-            }
-            else if (KnownTypes.IsKnowType(_ys.Type))
-            {
-                KnownTypes.Serialize(obj, _baseElement, _ys.TypeNamespace);
-            }
-            else // no custom serializers or known type
-            {
-                SerializeFields(obj);
-            }
-
-            if (_baseElement.Parent == null) _ys.XmlNamespaceManager.AddNamespacesToElement(_baseElement, _ys.DocumentDefaultNamespace, _ys.Options, _ys.UdtWrapper);
-
-            return _baseElement;
         }
 
         private void SerializeFields(object obj)
@@ -614,6 +614,7 @@ namespace YAXLib
             return attribute;
         }
 
+#nullable enable
         /// <summary>
         ///     Adds the namespace applying to the object type specified in <paramref name="wrapper" />
         ///     to the <paramref name="className" />
@@ -628,8 +629,9 @@ namespace YAXLib
             else
                 _ys.XmlNamespaceManager.RegisterNamespace(elemName.Namespace, null);
 
-            return new XElement(elemName, null);
+            return new XElement(elemName, default(object?));
         }
+#nullable disable
 
         /// <summary>
         ///     Makes the element corresponding to the member specified.
@@ -776,9 +778,9 @@ namespace YAXLib
                     eachElementName.OverrideNsIfEmpty(elementName.Namespace.IfEmptyThen(_ys.TypeNamespace)
                         .IfEmptyThenNone());
             }
-
-            var elemChild = new XElement(eachElementName, null);
-
+#nullable enable
+            var elemChild = new XElement(eachElementName, default(object?));
+#nullable disable
             AddDictionaryKey(keyObj, elemChild, areKeyOfSameType, details);
 
             AddDictionaryValue(valueObj, elemChild, areValueOfSameType, dontSerializeNull, details);
@@ -1133,7 +1135,6 @@ namespace YAXLib
             if (ReflectionUtils.IsStringConvertibleIFormattable(value.GetType()))
             {
                 var elementValue = value.GetType().InvokeMethod("ToString", value, Array.Empty<object>());
-                //object elementValue = value.GetType().InvokeMember("ToString", BindingFlags.InvokeMethod, null, value, new object[0]);
                 return new XElement(name, elementValue);
             }
 

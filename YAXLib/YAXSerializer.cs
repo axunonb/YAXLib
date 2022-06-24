@@ -22,10 +22,6 @@ namespace YAXLib
     /// </summary>
     public class YAXSerializer
     {
-        #region Private fields
-
-        #endregion
-
         #region Public constructors
 
         /// <summary>
