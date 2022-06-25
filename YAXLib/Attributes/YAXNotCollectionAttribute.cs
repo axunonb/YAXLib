@@ -12,7 +12,14 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class |
                     AttributeTargets.Struct)]
-    public class YAXNotCollectionAttribute : YAXBaseAttribute
+    public class YAXNotCollectionAttribute : YAXBaseAttribute, IYaxMemberAttribute
     {
+        /// <inheritdoc/>
+        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        {
+            // arrays are always treated as collections
+            if (!ReflectionUtils.IsArray(memberWrapper.MemberType))
+                memberWrapper.IsAttributedAsNotCollection = true;
+        }
     }
 }

@@ -12,10 +12,8 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class |
                     AttributeTargets.Struct)]
-    public class YAXSerializeAsAttribute : YAXBaseAttribute
+    public class YAXSerializeAsAttribute : YAXBaseAttribute, IYaxMemberAttribute
     {
-        #region Constructors
-
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXSerializeAsAttribute" /> class.
         /// </summary>
@@ -25,15 +23,15 @@ namespace YAXLib.Attributes
             SerializeAs = serializeAs;
         }
 
-        #endregion
-
-        #region Properties
-
         /// <summary>
         ///     Gets or sets the alias for the property under which the property will be serialized.
         /// </summary>
         public string SerializeAs { get; set; }
 
-        #endregion
+        /// <inheritdoc/>
+        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        {
+            memberWrapper.Alias = StringUtils.RefineSingleElement(SerializeAs);
+        }
     }
 }

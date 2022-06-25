@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 using System;
+using YAXLib.Exceptions;
 
 namespace YAXLib.Attributes
 {
@@ -12,7 +13,7 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class |
                     AttributeTargets.Struct)]
-    public class YAXCustomSerializerAttribute : YAXBaseAttribute
+    public class YAXCustomSerializerAttribute : YAXBaseAttribute, IYaxMemberAttribute
     {
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXCustomSerializerAttribute" /> class.
@@ -28,5 +29,21 @@ namespace YAXLib.Attributes
         /// </summary>
         /// <value>The type of the custom serializer.</value>
         public Type CustomSerializerType { get; }
+
+        /// <inheritdoc/>
+        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        {
+            var isDesiredInterface =
+                ReflectionUtils.IsDerivedFromGenericInterfaceType(CustomSerializerType, typeof(ICustomSerializer<>),
+                    out var genTypeArg);
+
+            if (!isDesiredInterface)
+                throw new YAXObjectTypeMismatch(typeof(ICustomSerializer<>), CustomSerializerType);
+
+            if (!genTypeArg.IsAssignableFrom(memberWrapper.MemberType))
+                throw new YAXObjectTypeMismatch(memberWrapper.MemberType, genTypeArg);
+
+            memberWrapper.CustomSerializerType = CustomSerializerType;
+        }
     }
 }

@@ -10,7 +10,12 @@ namespace YAXLib.Attributes
     ///     This attribute is applicable to fields and properties.
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-    public class YAXDontSerializeAttribute : YAXBaseAttribute
+    public class YAXDontSerializeAttribute : YAXBaseAttribute, IYaxMemberAttribute
     {
+        /// <inheritdoc/>
+        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        {
+            memberWrapper.IsAttributedAsDontSerialize = true;
+        }
     }
 }

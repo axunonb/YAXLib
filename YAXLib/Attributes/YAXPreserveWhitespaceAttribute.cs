@@ -13,7 +13,12 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class |
                     AttributeTargets.Struct)]
-    public class YAXPreserveWhitespaceAttribute : YAXBaseAttribute
+    public class YAXPreserveWhitespaceAttribute : YAXBaseAttribute, IYaxMemberAttribute
     {
+        /// <inheritdoc/>
+        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        {
+            memberWrapper.PreservesWhitespace = true;
+        }
     }
 }

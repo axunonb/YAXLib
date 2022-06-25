@@ -11,10 +11,8 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Field |
                     AttributeTargets.Property)]
-    public class YAXCommentAttribute : YAXBaseAttribute
+    public class YAXCommentAttribute : YAXBaseAttribute, IYaxMemberAttribute
     {
-        #region Constructors
-
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXCommentAttribute" /> class.
         /// </summary>
@@ -24,9 +22,6 @@ namespace YAXLib.Attributes
             Comment = comment;
         }
 
-        #endregion
-
-        #region Properties
 
         /// <summary>
         ///     Gets or sets the comment.
@@ -34,6 +29,16 @@ namespace YAXLib.Attributes
         /// <value>The comment.</value>
         public string Comment { get; set; }
 
-        #endregion
+        
+        /// <inheritdoc/>
+        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        {
+            if (string.IsNullOrEmpty(Comment)) return;
+
+            var comments = Comment!.Split(new[] {'\r', '\n'}, StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < comments.Length; i++) comments[i] = $" {comments[i].Trim()} ";
+
+            memberWrapper.Comment = comments;
+        }
     }
 }
