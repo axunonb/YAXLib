@@ -4,8 +4,7 @@
 namespace YAXLib
 {
     /// <summary>
-    /// Attributes for members, that are process by <see cref="MemberWrapper"/>
-    /// must implement this interface.
+    /// Attributes used on type-level must implement this interface.
     /// </summary>
     internal interface IYaxTypeLevelAttribute
     {

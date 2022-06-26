@@ -421,8 +421,6 @@ namespace YAXLib
                 if (!isDesiredSerializerInterface)
                     throw new YAXObjectTypeMismatch(typeof(ICustomSerializer<>), serType);
                 
-                // Reason for missing unit test coverage (?):
-                // Usually this case throws before
                 if (!genTypeArg.IsAssignableFrom(UnderlyingType))
                     throw new YAXObjectTypeMismatch(UnderlyingType, genTypeArg);
 
