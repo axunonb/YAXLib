@@ -27,7 +27,7 @@ namespace YAXLib.Attributes
         public string Parent { get; set; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             if (memberWrapper.IsAllowedToProcess())
             {

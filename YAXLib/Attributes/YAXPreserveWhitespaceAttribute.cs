@@ -16,7 +16,7 @@ namespace YAXLib.Attributes
     public class YAXPreserveWhitespaceAttribute : YAXBaseAttribute, IYaxMemberAttribute
     {
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.PreservesWhitespace = true;
         }

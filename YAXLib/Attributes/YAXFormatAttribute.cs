@@ -32,7 +32,7 @@ namespace YAXLib.Attributes
         public string Format { get; set; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.Format = Format;
         }

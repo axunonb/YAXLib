@@ -136,7 +136,7 @@ namespace YAXLib
                 foreach (var attr in customSerAttrs)
                 {
                     if (attr is IYaxMemberAttribute memberAttr)
-                        memberAttr.Process(this);
+                        memberAttr.Setup(this);
                 }
             }
 
@@ -147,7 +147,7 @@ namespace YAXLib
                     continue;
 
                 if (attr is IYaxMemberAttribute memberAttr)
-                    memberAttr.Process(this);
+                    memberAttr.Setup(this);
                 /*if (attr is YAXBaseAttribute)
                     ProcessYaxAttribute(attr);*/
 
@@ -618,217 +618,7 @@ namespace YAXLib
         }
 
         /// <summary>
-        ///     Processes the specified attribute which is an instance of <c>YAXAttribute</c>.
-        /// </summary>
-        /// <param name="attr">The attribute to process.</param>
-        private void ProcessYaxAttribute(object attr)
-        {
-            if (attr is YAXCommentAttribute)
-            {
-                var comment = (attr as YAXCommentAttribute)?.Comment;
-                if (!string.IsNullOrEmpty(comment))
-                {
-                    var comments = comment!.Split(new[] {'\r', '\n'}, StringSplitOptions.RemoveEmptyEntries);
-                    for (var i = 0; i < comments.Length; i++) comments[i] = string.Format(" {0} ", comments[i].Trim());
-
-                    Comment = comments;
-                }
-            }
-            else if (attr is YAXSerializableFieldAttribute)
-            {
-                IsAttributedAsSerializable = true;
-            }
-            else if (attr is YAXAttributeForClassAttribute)
-            {
-                // MemberWrapper processes YAXCustomSerializerAttribute and YAXCollectionAttribute first
-                if (ReflectionUtils.IsBasicType(MemberType) || HasCustomSerializer || MemberTypeWrapper.HasCustomSerializer ||
-                    _collectionAttributeInstance != null && _collectionAttributeInstance.SerializationType ==
-                    YAXCollectionSerializationTypes.Serially)
-                {
-                    IsSerializedAsAttribute = true;
-                    SerializationLocation = ".";
-                }
-            }
-            else if (attr is YAXValueForClassAttribute)
-            {
-                // MemberWrapper processes YAXCustomSerializerAttribute and YAXCollectionAttribute first
-                if (ReflectionUtils.IsBasicType(MemberType) || HasCustomSerializer || MemberTypeWrapper.HasCustomSerializer ||
-                    _collectionAttributeInstance != null && _collectionAttributeInstance.SerializationType ==
-                    YAXCollectionSerializationTypes.Serially)
-                {
-                    IsSerializedAsValue = true;
-                    SerializationLocation = ".";
-                }
-            }
-            else if (attr is YAXAttributeForAttribute forAttribute)
-            {
-                // MemberWrapper processes YAXCustomSerializerAttribute and YAXCollectionAttribute first
-                if (ReflectionUtils.IsBasicType(MemberType) || HasCustomSerializer ||
-                    _collectionAttributeInstance != null && _collectionAttributeInstance.SerializationType ==
-                    YAXCollectionSerializationTypes.Serially)
-                {
-                    IsSerializedAsAttribute = true;
-                    StringUtils.ExtractPathAndAliasFromLocationString(forAttribute.Parent,
-                        out var path, out var alias);
-
-                    SerializationLocation = path;
-                    if (!string.IsNullOrEmpty(alias))
-                        Alias = StringUtils.RefineSingleElement(alias);
-                }
-            }
-            else if (attr is YAXElementForAttribute attribute)
-            {
-                IsSerializedAsElement = true;
-
-                StringUtils.ExtractPathAndAliasFromLocationString(attribute.Parent, out var path,
-                    out var alias);
-
-                SerializationLocation = path;
-                if (!string.IsNullOrEmpty(alias))
-                    Alias = StringUtils.RefineSingleElement(alias);
-            }
-            else if (attr is YAXValueForAttribute valueForAttribute)
-            {
-                // MemberWrapper processes YAXCustomSerializerAttribute and YAXCollectionAttribute first
-                if (ReflectionUtils.IsBasicType(MemberType) || HasCustomSerializer ||
-                    _collectionAttributeInstance != null && _collectionAttributeInstance.SerializationType ==
-                    YAXCollectionSerializationTypes.Serially)
-                {
-                    IsSerializedAsValue = true;
-
-                    StringUtils.ExtractPathAndAliasFromLocationString(valueForAttribute.Parent, out var path,
-                        out var alias);
-
-                    SerializationLocation = path;
-                    if (!string.IsNullOrEmpty(alias))
-                        Alias = StringUtils.RefineSingleElement(alias);
-                }
-            }
-            else if (attr is YAXDontSerializeAttribute)
-            {
-                IsAttributedAsDontSerialize = true;
-            }
-            else if (attr is YAXSerializeAsAttribute asAttribute)
-            {
-                Alias = StringUtils.RefineSingleElement(asAttribute.SerializeAs);
-            }
-            else if (attr is YAXCollectionAttribute)
-            {
-                _collectionAttributeInstance = attr as YAXCollectionAttribute;
-            }
-            else if (attr is YAXDictionaryAttribute)
-            {
-                _dictionaryAttributeInstance = attr as YAXDictionaryAttribute;
-            }
-            else if (attr is YAXErrorIfMissedAttribute)
-            {
-                if (attr is YAXErrorIfMissedAttribute temp)
-                {
-                    TreatErrorsAs = temp.TreatAs;
-                    DefaultValue = temp.DefaultValue;
-                }
-            }
-            else if (attr is YAXFormatAttribute formatAttribute)
-            {
-                Format = formatAttribute.Format;
-            }
-            else if (attr is YAXNotCollectionAttribute)
-            {
-                // arrays are always treated as collections
-                if (!ReflectionUtils.IsArray(MemberType))
-                    IsAttributedAsNotCollection = true;
-            }
-            else if (attr is YAXCustomSerializerAttribute customSerializerAttribute)
-            {
-                var serType = customSerializerAttribute.CustomSerializerType;
-
-                var isDesiredInterface =
-                    ReflectionUtils.IsDerivedFromGenericInterfaceType(serType, typeof(ICustomSerializer<>),
-                        out var genTypeArg);
-
-                if (!isDesiredInterface)
-                    throw new YAXObjectTypeMismatch(typeof(ICustomSerializer<>), serType);
-
-                if (!genTypeArg.IsAssignableFrom(MemberType))
-                    throw new YAXObjectTypeMismatch(MemberType, genTypeArg);
-
-                CustomSerializerType = serType;
-            }
-            else if (attr is YAXPreserveWhitespaceAttribute)
-            {
-                PreservesWhitespace = true;
-            }
-            else if (attr is YAXSerializableTypeAttribute)
-            {
-                // this should not happen
-                throw new Exception("This attribute is not applicable to fields and properties!");
-            }
-            else if (attr is YAXNamespaceAttribute nsAttrib)
-            {
-                Namespace = nsAttrib.Namespace;
-                NamespacePrefix = nsAttrib.Prefix;
-            }
-            else if (attr is YAXTypeAttribute)
-            {
-                var yaxTypeAttr = attr as YAXTypeAttribute;
-                var alias = yaxTypeAttr?.Alias;
-                if (alias != null)
-                {
-                    alias = alias.Trim();
-                    if (alias.Length == 0)
-                        alias = null;
-                }
-
-                if (_possibleRealTypes.Any(x => x.Type == yaxTypeAttr?.Type))
-                    throw new YAXPolymorphicException(
-                        $"The type \"{yaxTypeAttr?.Type.Name}\" for field/property \"{_memberInfo}\" has already been defined through another attribute.");
-
-                if (alias != null && _possibleRealTypes.Any(x => alias.Equals(x.Alias, StringComparison.Ordinal)))
-                    throw new YAXPolymorphicException(
-                        $"The alias \"{alias}\" given to type \"{yaxTypeAttr?.Type.Name}\" for field/property \"{_memberInfo}\" has already been given to another type through another attribute.");
-
-                if (yaxTypeAttr != null) _possibleRealTypes.Add(yaxTypeAttr);
-            }
-            else if (attr is YAXCollectionItemTypeAttribute)
-            {
-                var yaxCollectionItemTypeAttr = attr as YAXCollectionItemTypeAttribute;
-                var alias = yaxCollectionItemTypeAttr?.Alias;
-                if (alias != null)
-                {
-                    alias = alias.Trim();
-                    if (alias.Length == 0)
-                        alias = null;
-                }
-
-                if (_possibleCollectionItemRealTypes.Any(x => x.Type == yaxCollectionItemTypeAttr?.Type))
-                    throw new YAXPolymorphicException(string.Format(
-                        "The collection-item type \"{0}\" for collection \"{1}\" has already been defined through another attribute.",
-                        yaxCollectionItemTypeAttr?.Type.Name, _memberInfo));
-
-                if (alias != null &&
-                    _possibleCollectionItemRealTypes.Any(x => alias.Equals(x.Alias, StringComparison.Ordinal)))
-                    throw new YAXPolymorphicException(string.Format(
-                        "The alias \"{0}\" given to collection-item type \"{1}\" for field/property \"{2}\" has already been given to another type through another attribute.",
-                        alias, yaxCollectionItemTypeAttr?.Type.Name, _memberInfo));
-
-                if (yaxCollectionItemTypeAttr != null) _possibleCollectionItemRealTypes.Add(yaxCollectionItemTypeAttr);
-            }
-            else if (attr is YAXDontSerializeIfNullAttribute)
-            {
-                IsAttributedAsDontSerializeIfNull = true;
-            }
-            else if (attr is YAXElementOrder)
-            {
-                Order = (attr as YAXElementOrder)?.Order ?? 0;
-            }
-            else
-            {
-                throw new Exception("Added new attribute type to the library but not yet processed!");
-            }
-        }
-
-        /// <summary>
-        /// Called by the following attributes implementing <see cref="IYaxMemberAttribute.Process(MemberWrapper)"/>:
+        /// Called by the following attributes implementing <see cref="IYaxMemberAttribute.Setup"/>:
         /// <see cref="YAXAttributeForClassAttribute"/>, <see cref="YAXValueForClassAttribute"/>, <see cref="YAXAttributeForAttribute"/>
         /// <see cref="YAXValueForAttribute"/>.
         /// </summary>

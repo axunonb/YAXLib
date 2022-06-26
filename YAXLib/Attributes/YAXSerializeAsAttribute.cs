@@ -29,7 +29,7 @@ namespace YAXLib.Attributes
         public string SerializeAs { get; set; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.Alias = StringUtils.RefineSingleElement(SerializeAs);
         }

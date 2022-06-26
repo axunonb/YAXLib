@@ -13,7 +13,7 @@ namespace YAXLib.Attributes
     public class YAXAttributeForClassAttribute : YAXBaseAttribute, IYaxMemberAttribute
     {
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             if (memberWrapper.IsAllowedToProcess())
             {

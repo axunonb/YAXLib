@@ -13,7 +13,7 @@ namespace YAXLib.Attributes
     public class YAXDontSerializeAttribute : YAXBaseAttribute, IYaxMemberAttribute
     {
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.IsAttributedAsDontSerialize = true;
         }

@@ -15,7 +15,7 @@ namespace YAXLib.Attributes
     public class YAXSerializableFieldAttribute : YAXBaseAttribute, IYaxMemberAttribute
     {
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.IsAttributedAsSerializable = true;
         }

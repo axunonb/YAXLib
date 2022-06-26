@@ -31,7 +31,7 @@ namespace YAXLib.Attributes
 
         
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             if (string.IsNullOrEmpty(Comment)) return;
 

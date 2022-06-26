@@ -18,7 +18,7 @@ namespace YAXLib.Attributes
         public string Alias { get; set; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.AddAttributeToListOfRealTypes(this);
         }

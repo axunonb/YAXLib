@@ -59,7 +59,7 @@ namespace YAXLib.Attributes
         public bool IsWhiteSpaceSeparator { get; set; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.CollectionAttributeInstance = this;
         }

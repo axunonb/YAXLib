@@ -54,7 +54,7 @@ namespace YAXLib.Attributes
         public string Prefix { get; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.Namespace = Namespace;
             memberWrapper.NamespacePrefix = Prefix;

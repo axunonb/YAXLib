@@ -15,7 +15,7 @@ namespace YAXLib.Attributes
     public class YAXNotCollectionAttribute : YAXBaseAttribute, IYaxMemberAttribute
     {
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             // arrays are always treated as collections
             if (!ReflectionUtils.IsArray(memberWrapper.MemberType))

@@ -91,7 +91,7 @@ namespace YAXLib.Attributes
         public string ValueFormatString { get; set; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.DictionaryAttributeInstance = this;
         }

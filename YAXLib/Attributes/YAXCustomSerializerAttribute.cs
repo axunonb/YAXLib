@@ -31,7 +31,7 @@ namespace YAXLib.Attributes
         public Type CustomSerializerType { get; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             var isDesiredInterface =
                 ReflectionUtils.IsDerivedFromGenericInterfaceType(CustomSerializerType, typeof(ICustomSerializer<>),

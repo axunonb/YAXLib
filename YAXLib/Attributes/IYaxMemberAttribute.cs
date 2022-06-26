@@ -11,8 +11,9 @@ namespace YAXLib
     {
         /// <summary>
         /// The method is invoked by <see cref="MemberWrapper"/>.
+        /// Initial, attribute-specific properties for <see cref="MemberWrapper"/> will be set.
         /// </summary>
         /// <param name="memberWrapper"></param>
-        void Process (MemberWrapper memberWrapper);
+        void Setup (MemberWrapper memberWrapper);
     }
 }

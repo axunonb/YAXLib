@@ -30,7 +30,7 @@ namespace YAXLib.Attributes
         public int Order { get; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.Order = Order;
         }

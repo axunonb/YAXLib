@@ -39,7 +39,7 @@ namespace YAXLib.Attributes
         public object DefaultValue { get; set; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Process(MemberWrapper memberWrapper)
+        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.TreatErrorsAs = TreatAs;
             memberWrapper.DefaultValue = DefaultValue;
