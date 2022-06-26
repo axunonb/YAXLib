@@ -118,9 +118,6 @@ namespace YAXLib
 
                 if (attr is IYaxMemberLevelAttribute memberAttr)
                     memberAttr.Setup(this);
-                /*if (attr is YAXBaseAttribute)
-                    ProcessYaxAttribute(attr);*/
-
             }
 
             // now override some values from member-type-wrapper into member-wrapper
