@@ -13,7 +13,7 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class |
                     AttributeTargets.Struct)]
-    public class YAXCustomSerializerAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
+    public class YAXCustomSerializerAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute, IYaxTypeLevelAttribute
     {
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXCustomSerializerAttribute" /> class.
@@ -33,6 +33,19 @@ namespace YAXLib.Attributes
         /// <inheritdoc/>
         void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
+            EnsureDesiredInterface(memberWrapper.MemberType);
+            memberWrapper.CustomSerializerType = CustomSerializerType;
+        }
+
+        /// <inheritdoc/>
+        void IYaxTypeLevelAttribute.Setup(UdtWrapper udtWrapper)
+        {
+            EnsureDesiredInterface(udtWrapper.UnderlyingType);
+            udtWrapper.CustomSerializerType = CustomSerializerType;
+        }
+
+        private void EnsureDesiredInterface(Type type)
+        {
             var isDesiredInterface =
                 ReflectionUtils.IsDerivedFromGenericInterfaceType(CustomSerializerType, typeof(ICustomSerializer<>),
                     out var genTypeArg);
@@ -40,10 +53,8 @@ namespace YAXLib.Attributes
             if (!isDesiredInterface)
                 throw new YAXObjectTypeMismatch(typeof(ICustomSerializer<>), CustomSerializerType);
 
-            if (!genTypeArg.IsAssignableFrom(memberWrapper.MemberType))
-                throw new YAXObjectTypeMismatch(memberWrapper.MemberType, genTypeArg);
-
-            memberWrapper.CustomSerializerType = CustomSerializerType;
+            if (!genTypeArg.IsAssignableFrom(type))
+                throw new YAXObjectTypeMismatch(type, genTypeArg);
         }
     }
 }

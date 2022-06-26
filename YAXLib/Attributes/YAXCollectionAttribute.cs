@@ -12,7 +12,7 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class |
                     AttributeTargets.Struct)]
-    public class YAXCollectionAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
+    public class YAXCollectionAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute, IYaxTypeLevelAttribute
     {
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXCollectionAttribute" /> class.
@@ -62,6 +62,12 @@ namespace YAXLib.Attributes
         void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.CollectionAttributeInstance = this;
+        }
+
+        /// <inheritdoc/>
+        void IYaxTypeLevelAttribute.Setup(UdtWrapper udtWrapper)
+        {
+            udtWrapper.CollectionAttributeInstance = this;
         }
     }
 }

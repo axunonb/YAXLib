@@ -11,7 +11,7 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Field |
                     AttributeTargets.Property)]
-    public class YAXCommentAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
+    public class YAXCommentAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute, IYaxTypeLevelAttribute
     {
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXCommentAttribute" /> class.
@@ -33,12 +33,23 @@ namespace YAXLib.Attributes
         /// <inheritdoc/>
         void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
-            if (string.IsNullOrEmpty(Comment)) return;
+            memberWrapper.Comment = GetComment();
+        }
+
+        /// <inheritdoc/>
+        void IYaxTypeLevelAttribute.Setup(UdtWrapper udtWrapper)
+        {
+            udtWrapper.Comment = GetComment();
+        }
+
+        private string[] GetComment()
+        {
+            if (string.IsNullOrEmpty(Comment)) return Array.Empty<string>();
 
             var comments = Comment!.Split(new[] {'\r', '\n'}, StringSplitOptions.RemoveEmptyEntries);
             for (var i = 0; i < comments.Length; i++) comments[i] = $" {comments[i].Trim()} ";
 
-            memberWrapper.Comment = comments;
+            return comments;
         }
     }
 }

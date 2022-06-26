@@ -11,7 +11,7 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Enum | AttributeTargets.Field |
                     AttributeTargets.Property | AttributeTargets.Struct)]
-    public class YAXNamespaceAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
+    public class YAXNamespaceAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute, IYaxTypeLevelAttribute
     {
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXNamespaceAttribute" /> class.
@@ -58,6 +58,13 @@ namespace YAXLib.Attributes
         {
             memberWrapper.Namespace = Namespace;
             memberWrapper.NamespacePrefix = Prefix;
+        }
+
+        /// <inheritdoc/>
+        void IYaxTypeLevelAttribute.Setup(UdtWrapper udtWrapper)
+        {
+            udtWrapper.Namespace = Namespace;
+            udtWrapper.NamespacePrefix = Prefix;
         }
     }
 }

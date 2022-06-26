@@ -88,8 +88,7 @@ namespace YAXLib
             SetYAXSerializerOptions(callerSerializer);
             
             foreach (var attr in _udtType.GetCustomAttributes(true))
-                if (attr is YAXBaseAttribute)
-                    ProcessYAXAttribute(attr);
+                if (attr is IYaxTypeLevelAttribute typeLevelAttribute) typeLevelAttribute.Setup(this);
         }
 
         /// <summary>
@@ -100,7 +99,7 @@ namespace YAXLib
         {
             get { return _alias; }
 
-            private set
+            internal set
             {
                 if (Namespace.IsEmpty())
                 {
@@ -119,13 +118,13 @@ namespace YAXLib
         ///     Gets an array of comments for the underlying type.
         /// </summary>
         /// <value>The array of comments for the underlying type.</value>
-        public string[] Comment { get; private set; }
+        public string[] Comment { get; internal set; }
 
         /// <summary>
         ///     Gets the fields to be serialized.
         /// </summary>
         /// <value>The fields to be serialized.</value>
-        public YAXSerializationFields FieldsToSerialize { get; private set; }
+        public YAXSerializationFields FieldsToSerialize { get; internal set; }
 
         /// <summary>
         ///     Gets the serialization options.
@@ -139,7 +138,7 @@ namespace YAXLib
         /// <value>
         ///     <c>true</c> if this instance is attributed as not collection; otherwise, <c>false</c>.
         /// </value>
-        public bool IsAttributedAsNotCollection { get; private set; }
+        public bool IsAttributedAsNotCollection { get; internal set; }
 
         /// <summary>
         ///     Gets a value indicating whether this instance has comment.
@@ -252,19 +251,27 @@ namespace YAXLib
         ///     Gets the collection attribute instance.
         /// </summary>
         /// <value>The collection attribute instance.</value>
-        public YAXCollectionAttribute CollectionAttributeInstance => _collectionAttributeInstance;
+        public YAXCollectionAttribute CollectionAttributeInstance
+        {
+            get => _collectionAttributeInstance;
+            internal set => _collectionAttributeInstance = value;
+        }
 
         /// <summary>
         ///     Gets the dictionary attribute instance.
         /// </summary>
         /// <value>The dictionary attribute instance.</value>
-        public YAXDictionaryAttribute DictionaryAttributeInstance => _dictionaryAttributeInstance;
+        public YAXDictionaryAttribute DictionaryAttributeInstance
+        {
+            get => _dictionaryAttributeInstance;
+            internal set => _dictionaryAttributeInstance = value;
+        }
 
         /// <summary>
         ///     Gets or sets the type of the custom serializer.
         /// </summary>
         /// <value>The type of the custom serializer.</value>
-        public Type CustomSerializerType { get; private set; }
+        public Type CustomSerializerType { get; internal set; }
 
         /// <summary>
         ///     Gets a value indicating whether this instance has custom serializer.
@@ -274,7 +281,7 @@ namespace YAXLib
         /// </value>
         public bool HasCustomSerializer => CustomSerializerType != null;
 
-        public bool PreservesWhitespace { get; private set; }
+        public bool PreservesWhitespace { get; internal set; }
 
         /// <summary>
         ///     Gets a value indicating whether this instance has a custom namespace
@@ -293,7 +300,7 @@ namespace YAXLib
         {
             get { return _namespace; }
 
-            private set
+            internal set
             {
                 _namespace = value;
                 // explicit namespace definition overrides namespace definitions in SerializeAs attributes.
@@ -315,7 +322,7 @@ namespace YAXLib
         ///     setting a default namespace for that element would make it apply to
         ///     the whole document).
         /// </remarks>
-        public string NamespacePrefix { get; private set; }
+        public string NamespacePrefix { get; internal set; }
 
 
         /// <summary>
@@ -447,6 +454,16 @@ namespace YAXLib
             {
                 throw new Exception("Attribute not applicable to types!");
             }
+        }
+
+        /// <summary>
+        /// Used by attributes when setting <see cref="YAXSerializationOptions"/>.
+        /// </summary>
+        /// <param name="options"></param>
+        internal void SetSerializationOptionsFromAttribute(YAXSerializationOptions options)
+        {
+            SerializationOption = options;
+            _isSerializationOptionSetByAttribute = true;
         }
     }
 }

@@ -12,7 +12,7 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class |
                     AttributeTargets.Struct)]
-    public class YAXSerializeAsAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
+    public class YAXSerializeAsAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute, IYaxTypeLevelAttribute
     {
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXSerializeAsAttribute" /> class.
@@ -32,6 +32,12 @@ namespace YAXLib.Attributes
         void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.Alias = StringUtils.RefineSingleElement(SerializeAs);
+        }
+
+        /// <inheritdoc/>
+        void IYaxTypeLevelAttribute.Setup(UdtWrapper udtWrapper)
+        {
+            udtWrapper.Alias = StringUtils.RefineSingleElement(SerializeAs);
         }
     }
 }
