@@ -6,7 +6,7 @@ using System;
 namespace YAXLib.Attributes
 {
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = true)]
-    internal class YAXTypeAttribute : YAXBaseAttribute, IYaxMemberAttribute
+    internal class YAXTypeAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
     {
         public YAXTypeAttribute(Type type)
         {
@@ -18,7 +18,7 @@ namespace YAXLib.Attributes
         public string Alias { get; set; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
+        void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.AddAttributeToListOfRealTypes(this);
         }

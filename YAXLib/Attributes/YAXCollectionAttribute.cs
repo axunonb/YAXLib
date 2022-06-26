@@ -12,7 +12,7 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class |
                     AttributeTargets.Struct)]
-    public class YAXCollectionAttribute : YAXBaseAttribute, IYaxMemberAttribute
+    public class YAXCollectionAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
     {
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXCollectionAttribute" /> class.
@@ -59,7 +59,7 @@ namespace YAXLib.Attributes
         public bool IsWhiteSpaceSeparator { get; set; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
+        void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.CollectionAttributeInstance = this;
         }

@@ -13,7 +13,7 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class |
                     AttributeTargets.Struct)]
-    public class YAXDictionaryAttribute : YAXBaseAttribute, IYaxMemberAttribute
+    public class YAXDictionaryAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
     {
         private YAXNodeTypes _serializeKeyAs = YAXNodeTypes.Element;
         private YAXNodeTypes _serializeValueAs = YAXNodeTypes.Element;
@@ -91,7 +91,7 @@ namespace YAXLib.Attributes
         public string ValueFormatString { get; set; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
+        void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.DictionaryAttributeInstance = this;
         }

@@ -9,7 +9,7 @@ namespace YAXLib.Attributes
     ///     Specifies the order upon which a field or property is serialized / deserialized.
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-    public class YAXElementOrder : YAXBaseAttribute, IYaxMemberAttribute
+    public class YAXElementOrder : YAXBaseAttribute, IYaxMemberLevelAttribute
     {
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXElementOrder" /> class.
@@ -30,7 +30,7 @@ namespace YAXLib.Attributes
         public int Order { get; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
+        void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.Order = Order;
         }

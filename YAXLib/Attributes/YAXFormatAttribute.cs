@@ -13,7 +13,7 @@ namespace YAXLib.Attributes
     ///     This attribute is applicable to fields and properties.
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-    public class YAXFormatAttribute : YAXBaseAttribute, IYaxMemberAttribute
+    public class YAXFormatAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
     {
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXFormatAttribute" /> class.
@@ -32,7 +32,7 @@ namespace YAXLib.Attributes
         public string Format { get; set; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
+        void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.Format = Format;
         }

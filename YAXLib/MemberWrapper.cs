@@ -135,7 +135,7 @@ namespace YAXLib
                 var customSerAttrs = Attribute.GetCustomAttributes(_memberInfo, attrType, true);
                 foreach (var attr in customSerAttrs)
                 {
-                    if (attr is IYaxMemberAttribute memberAttr)
+                    if (attr is IYaxMemberLevelAttribute memberAttr)
                         memberAttr.Setup(this);
                 }
             }
@@ -146,7 +146,7 @@ namespace YAXLib
                 if (attrsToProcessEarlier.Contains(attr.GetType()))
                     continue;
 
-                if (attr is IYaxMemberAttribute memberAttr)
+                if (attr is IYaxMemberLevelAttribute memberAttr)
                     memberAttr.Setup(this);
                 /*if (attr is YAXBaseAttribute)
                     ProcessYaxAttribute(attr);*/
@@ -618,7 +618,7 @@ namespace YAXLib
         }
 
         /// <summary>
-        /// Called by the following attributes implementing <see cref="IYaxMemberAttribute.Setup"/>:
+        /// Called by the following attributes implementing <see cref="IYaxMemberLevelAttribute.Setup"/>:
         /// <see cref="YAXAttributeForClassAttribute"/>, <see cref="YAXValueForClassAttribute"/>, <see cref="YAXAttributeForAttribute"/>
         /// <see cref="YAXValueForAttribute"/>.
         /// </summary>

@@ -11,7 +11,7 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Field |
                     AttributeTargets.Property)]
-    public class YAXCommentAttribute : YAXBaseAttribute, IYaxMemberAttribute
+    public class YAXCommentAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
     {
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXCommentAttribute" /> class.
@@ -31,7 +31,7 @@ namespace YAXLib.Attributes
 
         
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
+        void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
             if (string.IsNullOrEmpty(Comment)) return;
 

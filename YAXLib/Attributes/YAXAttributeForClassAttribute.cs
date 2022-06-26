@@ -10,10 +10,10 @@ namespace YAXLib.Attributes
     ///     This attribute is applicable to fields and properties only.
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-    public class YAXAttributeForClassAttribute : YAXBaseAttribute, IYaxMemberAttribute
+    public class YAXAttributeForClassAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
     {
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
+        void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
             if (memberWrapper.IsAllowedToProcess())
             {

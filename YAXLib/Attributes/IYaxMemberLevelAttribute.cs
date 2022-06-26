@@ -7,7 +7,7 @@ namespace YAXLib
     /// Attributes for members, that are process by <see cref="MemberWrapper"/>
     /// must implement this interface.
     /// </summary>
-    internal interface IYaxMemberAttribute
+    internal interface IYaxMemberLevelAttribute
     {
         /// <summary>
         /// The method is invoked by <see cref="MemberWrapper"/>.

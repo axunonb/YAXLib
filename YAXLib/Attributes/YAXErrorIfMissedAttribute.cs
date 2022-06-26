@@ -12,7 +12,7 @@ namespace YAXLib.Attributes
     ///     This attribute is applicable to fields and properties.
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-    public class YAXErrorIfMissedAttribute : YAXBaseAttribute, IYaxMemberAttribute
+    public class YAXErrorIfMissedAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
     {
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXErrorIfMissedAttribute" /> class.
@@ -39,7 +39,7 @@ namespace YAXLib.Attributes
         public object DefaultValue { get; set; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
+        void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.TreatErrorsAs = TreatAs;
             memberWrapper.DefaultValue = DefaultValue;

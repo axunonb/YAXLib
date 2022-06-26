@@ -11,7 +11,7 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Enum | AttributeTargets.Field |
                     AttributeTargets.Property | AttributeTargets.Struct)]
-    public class YAXNamespaceAttribute : YAXBaseAttribute, IYaxMemberAttribute
+    public class YAXNamespaceAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
     {
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXNamespaceAttribute" /> class.
@@ -54,7 +54,7 @@ namespace YAXLib.Attributes
         public string Prefix { get; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
+        void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.Namespace = Namespace;
             memberWrapper.NamespacePrefix = Prefix;

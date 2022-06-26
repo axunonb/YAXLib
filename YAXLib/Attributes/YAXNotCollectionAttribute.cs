@@ -12,10 +12,10 @@ namespace YAXLib.Attributes
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class |
                     AttributeTargets.Struct)]
-    public class YAXNotCollectionAttribute : YAXBaseAttribute, IYaxMemberAttribute
+    public class YAXNotCollectionAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
     {
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
+        void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
             // arrays are always treated as collections
             if (!ReflectionUtils.IsArray(memberWrapper.MemberType))

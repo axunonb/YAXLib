@@ -10,7 +10,7 @@ namespace YAXLib.Attributes
     ///     for another element. This attribute is applicable to fields and properties.
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-    public class YAXElementForAttribute : YAXBaseAttribute, IYaxMemberAttribute
+    public class YAXElementForAttribute : YAXBaseAttribute, IYaxMemberLevelAttribute
     {
         /// <summary>
         ///     Initializes a new instance of the <see cref="YAXElementForAttribute" /> class.
@@ -28,7 +28,7 @@ namespace YAXLib.Attributes
         public string Parent { get; set; }
 
         /// <inheritdoc/>
-        void IYaxMemberAttribute.Setup(MemberWrapper memberWrapper)
+        void IYaxMemberLevelAttribute.Setup(MemberWrapper memberWrapper)
         {
             memberWrapper.IsSerializedAsElement = true;
 
