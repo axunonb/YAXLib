@@ -19,55 +19,24 @@ namespace YAXLib
     internal class MemberWrapper
     {
         /// <summary>
-        ///     the <c>FieldInfo</c> instance, if this member corresponds to a field, <c>null</c> otherwise
-        /// </summary>
-        private readonly FieldInfo? _fieldInfoInstance;
-
-        /// <summary>
         ///     <c>true</c> if this instance corresponds to a property, <c>false</c>
         ///     if it corresponds to a field (i.e., a member variable)
         /// </summary>
         private readonly bool _isProperty;
 
         /// <summary>
-        ///     reference to the underlying <c>MemberInfo</c> from which this instance is built
-        /// </summary>
-        private readonly MemberInfo _memberInfo;
-
-        /// <summary>
         ///     the member type of the underlying member
         /// </summary>
         private readonly Type _memberType;
 
-        /// <summary>
-        ///     a type wrapper around the underlying member type
-        /// </summary>
-        private readonly UdtWrapper _memberTypeWrapper;
+        private readonly List<YAXCollectionItemTypeAttribute> _possibleCollectionItemRealTypes = new();
 
-        private readonly List<YAXCollectionItemTypeAttribute> _possibleCollectionItemRealTypes =
-            new List<YAXCollectionItemTypeAttribute>();
-
-        private readonly List<YAXTypeAttribute> _possibleRealTypes = new List<YAXTypeAttribute>();
-
-        /// <summary>
-        ///     the <c>PropertyInfo</c> instance, if this member corresponds to a property, <c>null</c> otherwise
-        /// </summary>
-        private readonly PropertyInfo? _propertyInfoInstance;
+        private readonly List<YAXTypeAttribute> _possibleRealTypes = new();
 
         /// <summary>
         ///     The alias specified by the user
         /// </summary>
         private XName? _alias;
-
-        /// <summary>
-        ///     The collection attribute instance
-        /// </summary>
-        private YAXCollectionAttribute? _collectionAttributeInstance;
-
-        /// <summary>
-        ///     the dictionary attribute instance
-        /// </summary>
-        private YAXDictionaryAttribute? _dictionaryAttributeInstance;
 
         /// <summary>
         ///     specifies whether this member is going to be serialized as an attribute
@@ -101,38 +70,39 @@ namespace YAXLib
             if (!(memberInfo.MemberType == MemberTypes.Property || memberInfo.MemberType == MemberTypes.Field))
                 throw new Exception("Member must be either property or field");
 
-            _memberInfo = memberInfo;
+            MemberInfo = memberInfo;
             _isProperty = memberInfo.MemberType == MemberTypes.Property;
 
-            Alias = StringUtils.RefineSingleElement(_memberInfo.Name);
+            Alias = StringUtils.RefineSingleElement(MemberInfo.Name);
             if (_isProperty)
             {
-                _propertyInfoInstance = (PropertyInfo) memberInfo;
-                _memberType = _propertyInfoInstance.PropertyType;
+                PropertyInfo = (PropertyInfo) memberInfo;
+                _memberType = PropertyInfo.PropertyType;
             }
             else
             {
-                _fieldInfoInstance = (FieldInfo) memberInfo;
-                _memberType = _fieldInfoInstance.FieldType;
+                FieldInfo = (FieldInfo) memberInfo;
+                _memberType = FieldInfo.FieldType;
             }
 
-            _memberTypeWrapper = TypeWrappersPool.Pool.GetTypeWrapper(MemberType, callerSerializer);
-            if (_memberTypeWrapper.HasNamespace)
+            MemberTypeWrapper = TypeWrappersPool.Pool.GetTypeWrapper(MemberType, callerSerializer);
+            if (MemberTypeWrapper.HasNamespace)
             {
-                Namespace = _memberTypeWrapper.Namespace;
-                NamespacePrefix = _memberTypeWrapper.NamespacePrefix;
+                Namespace = MemberTypeWrapper.Namespace;
+                NamespacePrefix = MemberTypeWrapper.NamespacePrefix;
             }
 
             InitInstance();
-
-            TreatErrorsAs = callerSerializer?.DefaultExceptionType ?? YAXExceptionTypes.Error;
+            
+            TreatErrorsAs = callerSerializer?.Options.ExceptionBehavior ?? YAXExceptionTypes.Error;
 
             // discover YAXCustomSerializerAttributes earlier, because some other attributes depend on it
             var attrsToProcessEarlier = new HashSet<Type>
                 {typeof(YAXCustomSerializerAttribute), typeof(YAXCollectionAttribute)};
+            
             foreach (var attrType in attrsToProcessEarlier)
             {
-                var customSerAttrs = Attribute.GetCustomAttributes(_memberInfo, attrType, true);
+                var customSerAttrs = Attribute.GetCustomAttributes(MemberInfo, attrType, true);
                 foreach (var attr in customSerAttrs)
                 {
                     if (attr is IYaxMemberLevelAttribute memberAttr)
@@ -140,7 +110,7 @@ namespace YAXLib
                 }
             }
 
-            foreach (var attr in Attribute.GetCustomAttributes(_memberInfo, true))
+            foreach (var attr in Attribute.GetCustomAttributes(MemberInfo, true))
             {
                 // no need to process, it has been processed earlier
                 if (attrsToProcessEarlier.Contains(attr.GetType()))
@@ -156,11 +126,11 @@ namespace YAXLib
             // now override some values from member-type-wrapper into member-wrapper
             // if member-type has collection attributes while the member itself does not have them, 
             // then use those of the member-type
-            if (_collectionAttributeInstance == null && _memberTypeWrapper.CollectionAttributeInstance != null)
-                _collectionAttributeInstance = _memberTypeWrapper.CollectionAttributeInstance;
+            if (CollectionAttributeInstance == null && MemberTypeWrapper.CollectionAttributeInstance != null)
+                CollectionAttributeInstance = MemberTypeWrapper.CollectionAttributeInstance;
             
-            if (_dictionaryAttributeInstance == null && _memberTypeWrapper.DictionaryAttributeInstance != null)
-                _dictionaryAttributeInstance = _memberTypeWrapper.DictionaryAttributeInstance;
+            if (DictionaryAttributeInstance == null && MemberTypeWrapper.DictionaryAttributeInstance != null)
+                DictionaryAttributeInstance = MemberTypeWrapper.DictionaryAttributeInstance;
         }
 
         /// <summary>
@@ -195,7 +165,7 @@ namespace YAXLib
             get
             {
                 if (_isProperty)
-                    return _propertyInfoInstance != null && _propertyInfoInstance.CanRead;
+                    return PropertyInfo != null && PropertyInfo.CanRead;
                 return true;
             }
         }
@@ -209,7 +179,7 @@ namespace YAXLib
             get
             {
                 if (_isProperty)
-                    return _propertyInfoInstance != null && _propertyInfoInstance.CanWrite;
+                    return PropertyInfo != null && PropertyInfo.CanWrite;
                 return true;
             }
         }
@@ -350,34 +320,34 @@ namespace YAXLib
         /// <summary>
         ///     Gets the <see cref="FieldInfo"/> of a field, if the member is a field.
         /// </summary>
-        public FieldInfo? FieldInfo => _fieldInfoInstance;
+        public FieldInfo? FieldInfo { get; }
 
         /// <summary>
         ///     Gets the <see cref="MemberInfo"/>.
         /// </summary>
-        public MemberInfo MemberInfo => _memberInfo;
+        public MemberInfo MemberInfo { get; }
 
         /// <summary>
         ///     Gets the <see cref="PropertyInfo"/> of a field, if the member is a property.
         /// </summary>
-        public PropertyInfo? PropertyInfo => _propertyInfoInstance;
+        public PropertyInfo? PropertyInfo { get; }
 
         /// <summary>
         ///     Gets the type wrapper instance corresponding to the member-type of this instance.
         /// </summary>
         /// <value>The type wrapper instance corresponding to the member-type of this instance.</value>
-        public UdtWrapper MemberTypeWrapper => _memberTypeWrapper;
+        public UdtWrapper MemberTypeWrapper { get; }
 
         /// <summary>
         ///     Gets a value indicating whether the underlying type is a known-type
         /// </summary>
-        public bool IsKnownType => _memberTypeWrapper.IsKnownType;
+        public bool IsKnownType => MemberTypeWrapper.IsKnownType;
 
         /// <summary>
         ///     Gets the original of this member (as opposed to its alias).
         /// </summary>
         /// <value>The original of this member .</value>
-        public string OriginalName => _memberInfo.Name;
+        public string OriginalName => MemberInfo.Name;
 
         /// <summary>
         ///     Gets the serialization location.
@@ -385,9 +355,9 @@ namespace YAXLib
         /// <value>The serialization location.</value>
         public string SerializationLocation
         {
-            get { return _serializationLocation; }
+            get => _serializationLocation;
 
-            internal set { _serializationLocation = StringUtils.RefineLocationString(value); }
+            internal set => _serializationLocation = StringUtils.RefineLocationString(value);
         }
 
         /// <summary>
@@ -400,21 +370,13 @@ namespace YAXLib
         ///     Gets the collection attribute instance.
         /// </summary>
         /// <value>The collection attribute instance.</value>
-        public YAXCollectionAttribute? CollectionAttributeInstance
-        {
-            get => _collectionAttributeInstance;
-            internal set => _collectionAttributeInstance = value;
-        }
+        public YAXCollectionAttribute? CollectionAttributeInstance { get; internal set; }
 
         /// <summary>
         ///     Gets the dictionary attribute instance.
         /// </summary>
         /// <value>The dictionary attribute instance.</value>
-        public YAXDictionaryAttribute? DictionaryAttributeInstance
-        {
-            get => _dictionaryAttributeInstance;
-            internal set => _dictionaryAttributeInstance = value;
-        }
+        public YAXDictionaryAttribute? DictionaryAttributeInstance { get; internal set; }
 
         /// <summary>
         ///     Gets a value indicating whether this instance is treated as a collection.
@@ -422,7 +384,7 @@ namespace YAXLib
         /// <value>
         ///     <c>true</c> if this instance is treated as a collection; otherwise, <c>false</c>.
         /// </value>
-        public bool IsTreatedAsCollection => !IsAttributedAsNotCollection && _memberTypeWrapper.IsTreatedAsCollection;
+        public bool IsTreatedAsCollection => !IsAttributedAsNotCollection && MemberTypeWrapper.IsTreatedAsCollection;
 
         /// <summary>
         ///     Gets a value indicating whether this instance is treated as a dictionary.
@@ -430,7 +392,7 @@ namespace YAXLib
         /// <value>
         ///     <c>true</c> if this instance is treated as a dictionary; otherwise, <c>false</c>.
         /// </value>
-        public bool IsTreatedAsDictionary => !IsAttributedAsNotCollection && _memberTypeWrapper.IsTreatedAsDictionary;
+        public bool IsTreatedAsDictionary => !IsAttributedAsNotCollection && MemberTypeWrapper.IsTreatedAsDictionary;
 
         /// <summary>
         ///     Gets or sets the type of the custom serializer.
@@ -512,8 +474,8 @@ namespace YAXLib
         public object? GetOriginalValue(object? obj, object[]? index)
         {
             if (_isProperty)
-                return _propertyInfoInstance?.GetValue(obj, index);
-            return _fieldInfoInstance?.GetValue(obj);
+                return PropertyInfo?.GetValue(obj, index);
+            return FieldInfo?.GetValue(obj);
         }
 
         /// <summary>
@@ -528,7 +490,7 @@ namespace YAXLib
             if (elementValue == null)
                 return null;
 
-            if (_memberTypeWrapper.IsEnum) return _memberTypeWrapper.EnumWrapper.GetAlias(elementValue);
+            if (MemberTypeWrapper.IsEnum) return MemberTypeWrapper.EnumWrapper.GetAlias(elementValue);
 
             // trying to build the element value
             if (HasFormat && !IsTreatedAsCollection)
@@ -547,9 +509,9 @@ namespace YAXLib
         public void SetValue(object obj, object? value)
         {
             if (_isProperty)
-                _propertyInfoInstance?.SetValue(obj, value, null);
+                PropertyInfo?.SetValue(obj, value, null);
             else
-                _fieldInfoInstance?.SetValue(obj, value);
+                FieldInfo?.SetValue(obj, value);
         }
 
         /// <summary>
@@ -563,7 +525,7 @@ namespace YAXLib
         public bool IsAllowedToBeSerialized(YAXSerializationFields serializationFields,
             bool dontSerializePropertiesWithNoSetter)
         {
-            if (_propertyInfoInstance != null && dontSerializePropertiesWithNoSetter && _isProperty && !_propertyInfoInstance.CanWrite)
+            if (PropertyInfo != null && dontSerializePropertiesWithNoSetter && _isProperty && !PropertyInfo.CanWrite)
                 return false;
 
             if (serializationFields == YAXSerializationFields.AllFields)
@@ -572,7 +534,7 @@ namespace YAXLib
                 return !IsAttributedAsDontSerialize && IsAttributedAsSerializable;
             if (serializationFields == YAXSerializationFields.PublicPropertiesOnly)
                 return !IsAttributedAsDontSerialize && _isProperty &&
-                       ReflectionUtils.IsPublicProperty(_propertyInfoInstance);
+                       ReflectionUtils.IsPublicProperty(PropertyInfo);
             throw new Exception("Unknown serialization field option");
         }
 
@@ -584,7 +546,7 @@ namespace YAXLib
         /// </returns>
         public override string ToString()
         {
-            return _memberInfo.ToString();
+            return MemberInfo.ToString();
         }
 
         // Private Methods 
@@ -610,11 +572,9 @@ namespace YAXLib
         /// </summary>
         private void InitDefaultValue()
         {
-            if (MemberType.IsValueType)
-                DefaultValue = Activator.CreateInstance(MemberType, new object[0]);
-            //DefaultValue = MemberType.InvokeMember(string.Empty, BindingFlags.CreateInstance, null, null, new object[0]);
-            else
-                DefaultValue = null;
+            DefaultValue = MemberType.IsValueType 
+                ? Activator.CreateInstance(MemberType, Array.Empty<object>()) 
+                : null;
         }
 
         /// <summary>
@@ -647,11 +607,11 @@ namespace YAXLib
 
             if (_possibleRealTypes.Any(x => x.Type == yaxTypeAttribute.Type))
                 throw new YAXPolymorphicException(
-                    $"The type \"{yaxTypeAttribute.Type.Name}\" for field/property \"{_memberInfo}\" has already been defined through another attribute.");
+                    $"The type \"{yaxTypeAttribute.Type.Name}\" for field/property \"{MemberInfo}\" has already been defined through another attribute.");
 
             if (alias != null && _possibleRealTypes.Any(x => alias.Equals(x.Alias, StringComparison.Ordinal)))
                 throw new YAXPolymorphicException(
-                    $"The alias \"{alias}\" given to type \"{yaxTypeAttribute.Type.Name}\" for field/property \"{_memberInfo}\" has already been given to another type through another attribute.");
+                    $"The alias \"{alias}\" given to type \"{yaxTypeAttribute.Type.Name}\" for field/property \"{MemberInfo}\" has already been given to another type through another attribute.");
 
             _possibleRealTypes.Add(yaxTypeAttribute);
         }
@@ -674,13 +634,13 @@ namespace YAXLib
             if (_possibleCollectionItemRealTypes.Any(x => x.Type == yaxCollectionItemTypeAttr.Type))
                 throw new YAXPolymorphicException(string.Format(
                     "The collection-item type \"{0}\" for collection \"{1}\" has already been defined through another attribute.",
-                    yaxCollectionItemTypeAttr.Type.Name, _memberInfo));
+                    yaxCollectionItemTypeAttr.Type.Name, MemberInfo));
 
             if (alias != null &&
                 _possibleCollectionItemRealTypes.Any(x => alias.Equals(x.Alias, StringComparison.Ordinal)))
                 throw new YAXPolymorphicException(string.Format(
                     "The alias \"{0}\" given to collection-item type \"{1}\" for field/property \"{2}\" has already been given to another type through another attribute.",
-                    alias, yaxCollectionItemTypeAttr.Type.Name, _memberInfo));
+                    alias, yaxCollectionItemTypeAttr.Type.Name, MemberInfo));
 
             _possibleCollectionItemRealTypes.Add(yaxCollectionItemTypeAttr);
         }

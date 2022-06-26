@@ -14,16 +14,6 @@ namespace YAXLib
     internal class UdtWrapper
     {
         /// <summary>
-        ///     boolean value indicating whether this instance is a wrapper around a collection type
-        /// </summary>
-        private readonly bool _isTypeCollection;
-
-        /// <summary>
-        ///     boolean value indicating whether this instance is a wrapper around a dictionary type
-        /// </summary>
-        private readonly bool _isTypeDictionary;
-
-        /// <summary>
         ///     the underlying type for this instance of <c>TypeWrapper</c>
         /// </summary>
         private readonly Type _udtType;
@@ -32,16 +22,6 @@ namespace YAXLib
         ///     Alias for the type
         /// </summary>
         private XName _alias;
-
-        /// <summary>
-        ///     The collection attribute instance
-        /// </summary>
-        private YAXCollectionAttribute _collectionAttributeInstance;
-
-        /// <summary>
-        ///     the dictionary attribute instance
-        /// </summary>
-        private YAXDictionaryAttribute _dictionaryAttributeInstance;
 
         /// <summary>
         ///     reference to an instance of <c>EnumWrapper</c> in case that the current instance is an enum.
@@ -72,12 +52,12 @@ namespace YAXLib
         /// </param>
         public UdtWrapper(Type udtType, YAXSerializer callerSerializer)
         {
-            _isTypeDictionary = false;
+            IsDictionaryType = false;
             _udtType = ReflectionUtils.IsNullable(udtType, out var nullableUnderlyingType)
                 ? nullableUnderlyingType
                 : udtType;
-            _isTypeCollection = ReflectionUtils.IsCollectionType(_udtType);
-            _isTypeDictionary = ReflectionUtils.IsIDictionary(_udtType);
+            IsCollectionType = ReflectionUtils.IsCollectionType(_udtType);
+            IsDictionaryType = ReflectionUtils.IsIDictionary(_udtType);
 
             Alias = StringUtils.RefineSingleElement(ReflectionUtils.GetTypeFriendlyName(_udtType));
             Comment = null;
@@ -96,7 +76,10 @@ namespace YAXLib
         /// <value>The alias of the type.</value>
         public XName Alias
         {
-            get { return _alias; }
+            get
+            {
+                return _alias;
+            }
 
             internal set
             {
@@ -145,7 +128,7 @@ namespace YAXLib
         /// <value>
         ///     <c>true</c> if this instance has comment; otherwise, <c>false</c>.
         /// </value>
-        public bool HasComment => Comment != null && Comment.Length > 0;
+        public bool HasComment => Comment is { Length: > 0 };
 
         /// <summary>
         ///     Gets the underlying type corresponding to this wrapper.
@@ -220,7 +203,7 @@ namespace YAXLib
         /// <value>
         ///     <c>true</c> if this instance wraps around a collection type; otherwise, <c>false</c>.
         /// </value>
-        public bool IsCollectionType => _isTypeCollection;
+        public bool IsCollectionType { get; }
 
         /// <summary>
         ///     Gets a value indicating whether this instance wraps around a dictionary type.
@@ -228,7 +211,7 @@ namespace YAXLib
         /// <value>
         ///     <c>true</c> if this instance wraps around a dictionary type; otherwise, <c>false</c>.
         /// </value>
-        public bool IsDictionaryType => _isTypeDictionary;
+        public bool IsDictionaryType { get; }
 
         /// <summary>
         ///     Gets a value indicating whether this instance is treated as collection.
@@ -250,21 +233,13 @@ namespace YAXLib
         ///     Gets the collection attribute instance.
         /// </summary>
         /// <value>The collection attribute instance.</value>
-        public YAXCollectionAttribute CollectionAttributeInstance
-        {
-            get => _collectionAttributeInstance;
-            internal set => _collectionAttributeInstance = value;
-        }
+        public YAXCollectionAttribute CollectionAttributeInstance { get; internal set; }
 
         /// <summary>
         ///     Gets the dictionary attribute instance.
         /// </summary>
         /// <value>The dictionary attribute instance.</value>
-        public YAXDictionaryAttribute DictionaryAttributeInstance
-        {
-            get => _dictionaryAttributeInstance;
-            internal set => _dictionaryAttributeInstance = value;
-        }
+        public YAXDictionaryAttribute DictionaryAttributeInstance { get; internal set; }
 
         /// <summary>
         ///     Gets or sets the type of the custom serializer.
@@ -322,8 +297,7 @@ namespace YAXLib
         ///     the whole document).
         /// </remarks>
         public string NamespacePrefix { get; internal set; }
-
-
+        
         /// <summary>
         ///     Sets the serializer options.
         /// </summary>
@@ -361,10 +335,9 @@ namespace YAXLib
         /// </exception>
         public override bool Equals(object obj)
         {
-            if (obj is UdtWrapper)
+            if (obj is UdtWrapper udtWrapper)
             {
-                var other = obj as UdtWrapper;
-                return _udtType == other._udtType;
+                return _udtType == udtWrapper.UnderlyingType;
             }
 
             return false;
