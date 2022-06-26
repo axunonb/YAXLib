@@ -5,7 +5,6 @@ using System;
 using System.Xml.Linq;
 using YAXLib.Attributes;
 using YAXLib.Enums;
-using YAXLib.Exceptions;
 
 namespace YAXLib
 {
@@ -380,80 +379,6 @@ namespace YAXLib
         public override int GetHashCode()
         {
             return _udtType.GetHashCode();
-        }
-
-        /// <summary>
-        ///     Processes the specified attribute.
-        /// </summary>
-        /// <param name="attr">The attribute to process.</param>
-        private void ProcessYAXAttribute(object attr)
-        {
-            if (attr is YAXCommentAttribute commentAttribute)
-            {
-                var comment = commentAttribute.Comment;
-                if (!string.IsNullOrEmpty(comment))
-                {
-                    var comments = comment.Split(new[] {'\r', '\n'}, StringSplitOptions.RemoveEmptyEntries);
-                    for (var i = 0; i < comments.Length; i++) comments[i] = string.Format(" {0} ", comments[i].Trim());
-
-                    Comment = comments;
-                }
-            }
-            else if (attr is YAXSerializableTypeAttribute theAttr)
-            {
-                FieldsToSerialize = theAttr.FieldsToSerialize;
-                if (theAttr.IsSerializationOptionSet())
-                {
-                    SerializationOption = theAttr.Options;
-                    _isSerializationOptionSetByAttribute = true;
-                }
-            }
-            else if (attr is YAXSerializeAsAttribute attribute)
-            {
-                Alias = StringUtils.RefineSingleElement(attribute.SerializeAs);
-            }
-            else if (attr is YAXNotCollectionAttribute)
-            {
-                if (!ReflectionUtils.IsArray(_udtType))
-                    IsAttributedAsNotCollection = true;
-            }
-            else if (attr is YAXCustomSerializerAttribute customSerializerAttribute)
-            {
-                var serType = customSerializerAttribute.CustomSerializerType;
-
-                var isDesiredSerializerInterface =
-                    ReflectionUtils.IsDerivedFromGenericInterfaceType(serType, typeof(ICustomSerializer<>),
-                        out var genTypeArg);
-
-                if (!isDesiredSerializerInterface)
-                    throw new YAXObjectTypeMismatch(typeof(ICustomSerializer<>), serType);
-                
-                if (!genTypeArg.IsAssignableFrom(UnderlyingType))
-                    throw new YAXObjectTypeMismatch(UnderlyingType, genTypeArg);
-
-                CustomSerializerType = serType;
-            }
-            else if (attr is YAXPreserveWhitespaceAttribute)
-            {
-                PreservesWhitespace = true;
-            }
-            else if (attr is YAXNamespaceAttribute nsAttrib)
-            {
-                Namespace = nsAttrib.Namespace;
-                NamespacePrefix = nsAttrib.Prefix;
-            }
-            else if (attr is YAXCollectionAttribute)
-            {
-                _collectionAttributeInstance = attr as YAXCollectionAttribute;
-            }
-            else if (attr is YAXDictionaryAttribute)
-            {
-                _dictionaryAttributeInstance = attr as YAXDictionaryAttribute;
-            }
-            else
-            {
-                throw new Exception("Attribute not applicable to types!");
-            }
         }
 
         /// <summary>
